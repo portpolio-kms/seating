@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DrawPanel, type TeacherChannel } from '@/components/teacher/DrawPanel';
 import type { ToPresenter, ToTeacher } from '@/lib/channel';
-import { listSeatingRecords, saveClass, wipeAll, type ClassRecord } from '@/lib/db/repo';
+import { addSeatingRecord, listSeatingRecords, saveClass, wipeAll, type ClassRecord } from '@/lib/db/repo';
 import type { PairConstraint } from '@/lib/seating/types';
 
 function fakeChannel() {
@@ -137,10 +137,96 @@ describe('DrawPanel', () => {
     fireEvent.click(screen.getByTestId(`seat-${mate.seatId}`));
     expect(screen.getByText('⚠ 가온·나래: 짝 금지 조건과 겹쳐요')).toBeInTheDocument();
     expect(screen.getByTestId(`seat-${mate.seatId}`)).toHaveTextContent('나래');
-    // The presenter only ever gets names: the swap result goes out as a plain chart.
+    // The presenter only ever gets names, and only on confirm.
+    for (const [m] of send.mock.calls) expect(JSON.stringify(m)).not.toMatch(/constraint|avoid|위반|금지/);
+  });
+
+  it('a swap before confirming sends nothing to the presenter; confirm sends the swapped chart', async () => {
+    const { send } = await renderPanel(make());
+    await drawAndFinish();
+    const msg = send.mock.calls[0][0];
+    if (msg.type !== 'reveal') throw new Error('expected reveal');
+    const [a, b] = msg.stage.units[0].seats;
+    const sentBefore = send.mock.calls.length;
+    fireEvent.click(screen.getByTestId(`seat-${a.seatId}`));
+    fireEvent.click(screen.getByTestId(`seat-${b.seatId}`));
+    expect(screen.getByTestId(`seat-${a.seatId}`)).toHaveTextContent(b.name!);
+    expect(send.mock.calls.length).toBe(sentBefore);
+    fireEvent.click(screen.getByRole('button', { name: '이대로 확정' }));
+    await waitFor(() => expect(send.mock.calls.length).toBe(sentBefore + 1));
     const last = send.mock.calls.at(-1)![0];
-    expect(last.type).toBe('idle');
-    expect(JSON.stringify(last)).not.toMatch(/constraint|avoid|위반|금지/);
+    if (last.type !== 'idle' || last.view.kind !== 'chart') throw new Error('expected idle chart');
+    expect(last.view.stage.units[0].seats.map((x) => x.name)).toEqual([b.name, a.name]);
+  });
+
+  it('after confirming, a swap updates the record but reaches the presenter only via 발표 창에 반영', async () => {
+    const { send } = await renderPanel(make());
+    await drawAndFinish();
+    fireEvent.click(screen.getByRole('button', { name: '이대로 확정' }));
+    const pushBtn = await screen.findByRole('button', { name: '발표 창에 반영' });
+    expect(pushBtn).toBeDisabled();
+    const msg = send.mock.calls[0][0];
+    if (msg.type !== 'reveal') throw new Error('expected reveal');
+    const [a, b] = msg.stage.units[0].seats;
+    const sentBefore = send.mock.calls.length;
+    fireEvent.click(screen.getByTestId(`seat-${a.seatId}`));
+    fireEvent.click(screen.getByTestId(`seat-${b.seatId}`));
+    await waitFor(async () => {
+      const [rec] = await listSeatingRecords('c1');
+      expect(rec.studentNames[rec.assignment[a.seatId]!]).toBe(b.name);
+    });
+    expect(send.mock.calls.length).toBe(sentBefore);
+    expect(pushBtn).toBeEnabled();
+    fireEvent.click(pushBtn);
+    expect(send.mock.calls.length).toBe(sentBefore + 1);
+    const last = send.mock.calls.at(-1)![0];
+    if (last.type !== 'idle' || last.view.kind !== 'chart') throw new Error('expected idle chart');
+    expect(last.view.stage.units[0].seats.map((x) => x.name)).toEqual([b.name, a.name]);
+    expect(pushBtn).toBeDisabled();
+  });
+
+  it('a roster change after drawing blocks confirming until a new draw', async () => {
+    await saveClass(make());
+    const fake = fakeChannel();
+    const { rerender } = render(<DrawPanel cls={make()} channel={fake.channel} />);
+    await screen.findByRole('button', { name: '마지막 확정 좌석표' });
+    await drawAndFinish();
+    expect(screen.getByRole('button', { name: '이대로 확정' })).toBeEnabled();
+    expect(screen.queryByText('명단이 바뀌었어요. 다시 뽑아 주세요')).toBeNull();
+    const removed = { ...make(), students: make().students.slice(0, 3) };
+    rerender(<DrawPanel cls={removed} channel={fake.channel} />);
+    expect(screen.getByText('명단이 바뀌었어요. 다시 뽑아 주세요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이대로 확정' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '이대로 확정' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await listSeatingRecords('c1')).toHaveLength(0);
+    // A renamed student is still the same student: no block.
+    const renamed = { ...make(), students: make().students.map((x, i) => (i === 0 ? { ...x, name: '하늘' } : x)) };
+    rerender(<DrawPanel cls={renamed} channel={fake.channel} />);
+    expect(screen.queryByText('명단이 바뀌었어요. 다시 뽑아 주세요')).toBeNull();
+    // A new draw with the changed roster can be confirmed again.
+    rerender(<DrawPanel cls={removed} channel={fake.channel} />);
+    fireEvent.click(screen.getByRole('button', { name: '다시 뽑기' }));
+    fireEvent.click(screen.getByRole('button', { name: '나머지 바로 공개' }));
+    expect(await screen.findByRole('button', { name: '이대로 확정' })).toBeEnabled();
+    expect(screen.queryByText('명단이 바뀌었어요. 다시 뽑아 주세요')).toBeNull();
+  });
+
+  it('마지막 확정 좌석표 uses the names saved with the record, not the current roster', async () => {
+    const cls = make();
+    await addSeatingRecord({
+      id: 'r1',
+      classId: 'c1',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      layout: cls.layout,
+      assignment: { 'u0-0-s0': 's0', 'u0-0-s1': 'gone' },
+      studentNames: { s0: '예전이름', gone: '전학간학생' },
+    });
+    const { send } = await renderPanel(cls);
+    fireEvent.click(screen.getByRole('button', { name: '마지막 확정 좌석표' }));
+    const m = send.mock.calls.at(-1)![0];
+    if (m.type !== 'idle' || m.view.kind !== 'chart') throw new Error('expected idle chart');
+    expect(m.view.stage.units[0].seats.map((x) => x.name)).toEqual(['예전이름', '전학간학생']);
   });
 
   it('idle choice sends the class title immediately', async () => {

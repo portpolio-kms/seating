@@ -26,7 +26,7 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
   };
 
   const remove = (s: Student) => {
-    if (!window.confirm(`${s.name || `${s.number}번`} 학생을 삭제할까요?`)) return;
+    if (!window.confirm(`${s.name || `${s.number}번`} 학생을 삭제할까요? 이 학생이 들어간 쌍 조건도 함께 지워져요.`)) return;
     onChange({
       ...cls,
       students: cls.students.filter((x) => x.id !== s.id),

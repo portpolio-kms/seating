@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RevealStage, type RevealControl } from '@/components/reveal/RevealStage';
 import { SeatingChart } from '@/components/SeatingChart';
-import { toStageView, type ToPresenter, type ToTeacher } from '@/lib/channel';
+import { recordToStageView, toStageView, type ToPresenter, type ToTeacher } from '@/lib/channel';
 import {
   addSeatingRecord,
   listSeatingRecords,
@@ -42,6 +42,14 @@ const KIND_LABEL: Record<ConstraintKind, string> = {
 };
 const POPUP_BLOCKED = '팝업이 차단됐어요. 주소창 오른쪽에서 허용해 주세요';
 const SAVE_FAILED = '저장하지 못했어요. 다시 시도해 주세요';
+const ROSTER_CHANGED = '명단이 바뀌었어요. 다시 뽑아 주세요';
+
+/** True when the draw seats exactly the students now on the roster (a roster edit makes it stale). */
+function matchesRoster(assignment: Assignment, cls: ClassRecord): boolean {
+  const seated = Object.values(assignment).filter((id): id is string => id !== null && id !== undefined);
+  const roster = new Set(cls.students.map((s) => s.id));
+  return seated.length === roster.size && new Set(seated).size === seated.length && seated.every((id) => roster.has(id));
+}
 
 const button = 'rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold hover:bg-slate-50 disabled:opacity-40';
 const primary = 'rounded-lg bg-blue-600 px-5 py-2 text-lg font-semibold text-white hover:bg-blue-700 disabled:opacity-40';
@@ -131,13 +139,13 @@ export function DrawPanel({
   const [record, setRecord] = useState<SeatingRecord | null>(null);
   const [lastRecord, setLastRecord] = useState<SeatingRecord | null | undefined>(undefined);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Swaps made after confirming that the presenter has not been sent yet. */
+  const [unpushed, setUnpushed] = useState(false);
 
   const controlRef = useRef<RevealControl>(null);
   /** What the presenter shows now (last reveal or idle message), re-sent on hello. */
   const presenterRef = useRef<ToPresenter | null>(null);
   const revealIdRef = useRef<string | null>(null);
-  /** True while the presenter shows the current draw, so swaps are pushed to it. */
-  const showingDrawRef = useRef(false);
   const classNameRef = useRef(cls.name);
   classNameRef.current = cls.name;
   const onRevealingRef = useRef(onRevealingChange);
@@ -196,6 +204,7 @@ export function DrawPanel({
   }, [assignment, violations]);
 
   const revealing = phase === 'revealing';
+  const rosterChanged = assignment !== null && !matchesRoster(assignment, cls);
 
   const chooseStyle = (s: RevealStyle) => {
     setStyle(s);
@@ -241,7 +250,7 @@ export function DrawPanel({
     }
     const id = crypto.randomUUID();
     revealIdRef.current = id;
-    showingDrawRef.current = true;
+    setUnpushed(false);
     setReasons([]);
     setAssignment(result.assignment);
     setRecord(null);
@@ -275,7 +284,7 @@ export function DrawPanel({
   };
 
   const confirm = async () => {
-    if (!assignment) return;
+    if (!assignment || rosterChanged) return;
     const ok = await save({
       id: crypto.randomUUID(),
       classId: cls.id,
@@ -286,7 +295,7 @@ export function DrawPanel({
     });
     if (!ok) return;
     setPhase('confirmed');
-    showingDrawRef.current = true;
+    setUnpushed(false);
     sendToPresenter({ type: 'idle', view: { kind: 'chart', stage: toStageView(cls, assignment) } });
   };
 
@@ -297,25 +306,25 @@ export function DrawPanel({
     const next: Assignment = { ...assignment, [selected]: assignment[seatId] ?? null, [seatId]: assignment[selected] ?? null };
     setSelected(null);
     setAssignment(next);
-    if (showingDrawRef.current) {
-      sendToPresenter({ type: 'idle', view: { kind: 'chart', stage: toStageView(cls, next) } });
+    // Swaps never go to the presenter on their own: before confirming the class is still watching the
+    // reveal; after confirming the teacher pushes them with "발표 창에 반영". The saved record follows.
+    if (phase === 'confirmed' && record) {
+      setUnpushed(true);
+      void save({ ...record, assignment: next, studentNames: studentNames() });
     }
-    // A swap after confirming updates the saved record.
-    if (phase === 'confirmed' && record) void save({ ...record, assignment: next, studentNames: studentNames() });
   };
 
-  const showTitle = () => {
-    showingDrawRef.current = false;
-    sendToPresenter(titleMessage(cls.name));
+  const pushSwaps = () => {
+    if (!assignment || rosterChanged) return;
+    setUnpushed(false);
+    sendToPresenter({ type: 'idle', view: { kind: 'chart', stage: toStageView(cls, assignment) } });
   };
+
+  const showTitle = () => sendToPresenter(titleMessage(cls.name));
 
   const showLastChart = () => {
     if (!lastRecord) return;
-    showingDrawRef.current = lastRecord.id === record?.id;
-    sendToPresenter({
-      type: 'idle',
-      view: { kind: 'chart', stage: toStageView({ ...cls, layout: lastRecord.layout }, lastRecord.assignment) },
-    });
+    sendToPresenter({ type: 'idle', view: { kind: 'chart', stage: recordToStageView(cls.name, lastRecord) } });
   };
 
   const warnings = [
@@ -444,16 +453,26 @@ export function DrawPanel({
                 selectedSeat={selected ?? undefined}
                 highlightSeats={warnSeats}
               />
+              {rosterChanged && (
+                <p role="alert" className="rounded bg-amber-100 px-3 py-2 text-amber-900">
+                  {ROSTER_CHANGED}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-3">
                 <button type="button" className={button} onClick={start}>
                   다시 뽑기
                 </button>
                 {phase === 'revealed' ? (
-                  <button type="button" className={primary} onClick={() => void confirm()}>
+                  <button type="button" className={primary} disabled={rosterChanged} onClick={() => void confirm()}>
                     이대로 확정
                   </button>
                 ) : (
-                  <span className="font-semibold text-emerald-700">확정했어요. 기록 탭에서 볼 수 있어요.</span>
+                  <>
+                    <span className="font-semibold text-emerald-700">확정했어요. 기록 탭에서 볼 수 있어요.</span>
+                    <button type="button" className={button} disabled={!unpushed || rosterChanged} onClick={pushSwaps}>
+                      발표 창에 반영
+                    </button>
+                  </>
                 )}
               </div>
             </>

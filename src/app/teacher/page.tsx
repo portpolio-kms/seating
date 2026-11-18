@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PinGate } from '@/components/PinGate';
@@ -11,7 +12,7 @@ import { LayoutEditor } from '@/components/teacher/LayoutEditor';
 import { RosterEditor } from '@/components/teacher/RosterEditor';
 import { useIdleLock } from '@/hooks/useIdleLock';
 import { openTeacherChannel, type ToPresenter, type ToTeacher } from '@/lib/channel';
-import { getSettings, listClasses, saveClass, saveSettings, type ClassRecord } from '@/lib/db/repo';
+import { deleteClass, getSettings, listClasses, saveClass, saveSettings, type ClassRecord } from '@/lib/db/repo';
 
 const TABS = [
   { id: 'draw', label: '뽑기' },
@@ -154,7 +155,24 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
     setData(null);
     setActiveId(null);
     setTab('draw');
+    setCreating(false);
     setUnlocked(false);
+  };
+
+  const deleteActive = async (c: ClassRecord) => {
+    try {
+      await deleteClass(c.id);
+    } catch {
+      setSaveError(true);
+      return;
+    }
+    const rest = (data?.classes ?? []).filter((x) => x.id !== c.id);
+    setData((d) => d && { ...d, classes: d.classes.filter((x) => x.id !== c.id) });
+    setTab('draw');
+    setCreating(false);
+    const next = rest[0]?.id ?? null;
+    setActiveId(next);
+    void saveSettings({ activeClassId: next });
   };
 
   const active = data?.classes.find((c) => c.id === activeId) ?? null;
@@ -168,6 +186,7 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
             setUnlocked(true);
             void load();
           }}
+          onWiped={onWiped}
         />
       )}
       {/* Kept mounted while locked so a running draw and the presenter channel survive the lock.
@@ -200,7 +219,10 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
                   + 새 학급
                 </button>
               ))}
-            <button type="button" className={`${button} ml-auto`} onClick={() => setUnlocked(false)}>
+            <Link href="/" className={`${button} ml-auto`}>
+              교실 화면으로
+            </Link>
+            <button type="button" className={button} onClick={() => setUnlocked(false)}>
               잠그기
             </button>
           </header>
@@ -261,6 +283,9 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
               {tab === 'settings' && (
                 <BackupPanel
                   cls={active}
+                  classLocked={revealing}
+                  onRename={(name) => persist({ ...active, name })}
+                  onDelete={() => void deleteActive(active)}
                   classes={data.classes}
                   idleMinutes={data.idleMinutes}
                   onIdleMinutesChange={(m) => setData((d) => d && { ...d, idleMinutes: m })}

@@ -6,7 +6,7 @@ import { exportBackup, importBackup, parseBackup, type BackupFile } from '@/lib/
 import { getSettings, saveSettings, wipeAll, type AppSettings, type ClassRecord } from '@/lib/db/repo';
 
 const IDLE_CHOICES = [1, 3, 5, 10, 15, 30];
-const button = 'rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold hover:bg-slate-50';
+const button = 'rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold hover:bg-slate-50 disabled:opacity-40';
 const field = 'rounded border border-slate-300 px-2 py-1';
 const card = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4';
 
@@ -27,8 +27,61 @@ function download(data: BackupFile) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** Rename or delete the current class. Keyed by class id so the name field resets on a class switch. */
+function ClassManager({
+  cls,
+  locked,
+  onRename,
+  onDelete,
+}: {
+  cls: ClassRecord;
+  locked: boolean;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(cls.name);
+  const trimmed = name.trim();
+  const remove = () => {
+    if (
+      !window.confirm(
+        `'${cls.name}' 학급을 지울까요? 이 학급의 명단과 좌석표 기록도 함께 지워지고 되돌릴 수 없어요.`,
+      )
+    )
+      return;
+    onDelete();
+  };
+  return (
+    <section className={card}>
+      <h2 className="text-lg font-bold">학급 관리</h2>
+      <form
+        className="flex flex-wrap items-center gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (trimmed && trimmed !== cls.name) onRename(trimmed);
+        }}
+      >
+        <input aria-label="학급 이름" className={field} value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="submit" className={button} disabled={!trimmed || trimmed === cls.name}>
+          이름 바꾸기
+        </button>
+      </form>
+      <button
+        type="button"
+        className="rounded-lg border border-red-300 bg-white px-4 py-2 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
+        disabled={locked}
+        onClick={remove}
+      >
+        이 학급 지우기
+      </button>
+    </section>
+  );
+}
+
 export function BackupPanel({
   cls,
+  classLocked = false,
+  onRename,
+  onDelete,
   classes,
   idleMinutes,
   onIdleMinutesChange,
@@ -37,6 +90,10 @@ export function BackupPanel({
 }: {
   /** Current class, or null on first run (import only). */
   cls: ClassRecord | null;
+  /** True while a reveal runs: the current class cannot be deleted then. */
+  classLocked?: boolean;
+  onRename?: (name: string) => void;
+  onDelete?: () => void;
   classes: ClassRecord[];
   idleMinutes: number;
   onIdleMinutesChange: (minutes: number) => void;
@@ -138,6 +195,10 @@ export function BackupPanel({
         >
           {error ?? message}
         </p>
+      )}
+
+      {cls && onRename && onDelete && (
+        <ClassManager key={cls.id} cls={cls} locked={classLocked} onRename={onRename} onDelete={onDelete} />
       )}
 
       <section className={card}>
