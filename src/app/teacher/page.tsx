@@ -23,7 +23,8 @@ const TABS = [
 type Tab = (typeof TABS)[number]['id'];
 
 const field = 'rounded border border-slate-300 px-3 py-2';
-const button = 'rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold hover:bg-slate-50';
+const button =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold hover:bg-slate-50 disabled:opacity-40';
 
 /**
  * Stable channel object for the panels. The BroadcastChannel is opened only inside an effect
@@ -168,7 +169,9 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
           }}
         />
       )}
-      {/* Kept mounted while locked so a running draw and the presenter channel survive the lock. */}
+      {/* Kept mounted while locked so a running draw and the presenter channel survive the lock.
+          Do not add a display utility (flex, grid, block...) to this wrapper: it would override the
+          `hidden` attribute and show student data and pair constraints on screen while locked. */}
       {data && (
         <div hidden={!unlocked} className="min-h-screen bg-slate-50 text-slate-900">
           <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-6 py-3">
@@ -178,6 +181,7 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
                 aria-label="학급 선택"
                 className={field}
                 value={activeId ?? ''}
+                disabled={revealing}
                 onChange={(e) => selectClass(e.target.value)}
               >
                 {data.classes.map((c) => (
@@ -191,7 +195,7 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
               (creating ? (
                 <NewClassForm onCreate={(n) => void createClass(n)} onCancel={() => setCreating(false)} />
               ) : (
-                <button type="button" className={button} onClick={() => setCreating(true)}>
+                <button type="button" className={button} disabled={revealing} onClick={() => setCreating(true)}>
                   + 새 학급
                 </button>
               ))}

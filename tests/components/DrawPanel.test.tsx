@@ -150,6 +150,45 @@ describe('DrawPanel', () => {
     expect(m.type === 'idle' && m.view.kind === 'title' && m.view.className).toBe('6학년 1반');
   });
 
+  it('opens the presenter window synchronously within the click, even when screen details are pending', async () => {
+    await renderPanel(make());
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const pending = new Promise<never>(() => {});
+    const w = window as Window & { getScreenDetails?: () => Promise<never> };
+    w.getScreenDetails = () => pending;
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '발표 창 열기' }));
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open.mock.calls[0][0]).toMatch(/present\/$/);
+      expect(await screen.findByRole('alert')).toHaveTextContent('팝업이 차단됐어요');
+    } finally {
+      delete w.getScreenDetails;
+      open.mockRestore();
+    }
+  });
+
+  it('moves the opened window to the other screen when permission is granted', async () => {
+    await renderPanel(make());
+    const win = { moveTo: vi.fn(), resizeTo: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValue(win);
+    const w = window as Window & { getScreenDetails?: () => Promise<unknown> };
+    const main = { availLeft: 0, availTop: 0, availWidth: 1920, availHeight: 1040 };
+    const tv = { availLeft: 1920, availTop: 0, availWidth: 3840, availHeight: 2160 };
+    w.getScreenDetails = () => Promise.resolve({ screens: [main, tv], currentScreen: main });
+    const perms = { query: vi.fn().mockResolvedValue({ state: 'granted' }) };
+    Object.defineProperty(navigator, 'permissions', { value: perms, configurable: true });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '발표 창 열기' }));
+      await waitFor(() => expect(win.moveTo).toHaveBeenCalledWith(1920, 0));
+      expect(win.resizeTo).toHaveBeenCalledWith(3840, 2160);
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      delete w.getScreenDetails;
+      delete (navigator as { permissions?: unknown }).permissions;
+      open.mockRestore();
+    }
+  });
+
   it('remembers the chosen reveal style', async () => {
     const spy = vi.fn();
     await saveClass(make());

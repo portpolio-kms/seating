@@ -57,25 +57,46 @@ function presenterUrl(): string {
   return m ? `${m[1]}present/` : '../present/';
 }
 
+type WindowWithScreens = Window & { getScreenDetails?: () => Promise<ScreenDetailsLike> };
+
 /**
- * Opens the presenter window, on the second screen when the Window Management API is available and
- * permitted. Returns null when the popup was blocked.
+ * Moves an already-open presenter window to another screen when window-management permission is
+ * granted. Without it, asks for the permission in the background so the next open can use it.
  */
-export async function openPresenterWindow(): Promise<Window | null> {
-  let features = 'popup,width=1280,height=720';
-  const w = window as Window & { getScreenDetails?: () => Promise<ScreenDetailsLike> };
-  if (typeof w.getScreenDetails === 'function') {
-    try {
-      const { screens, currentScreen: cur } = await w.getScreenDetails();
-      const other = screens.find((s) => s.availLeft !== cur.availLeft || s.availTop !== cur.availTop);
-      if (other) {
-        features = `popup,left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
-      }
-    } catch {
-      // Permission denied or unsupported: open a plain window.
-    }
+async function moveToOtherScreen(win: Window): Promise<void> {
+  const w = window as WindowWithScreens;
+  if (typeof w.getScreenDetails !== 'function') return;
+  let granted = false;
+  try {
+    const status = await navigator.permissions.query({ name: 'window-management' as PermissionName });
+    granted = status.state === 'granted';
+  } catch {
+    // Permission name unsupported: fall through to the background request.
   }
-  return window.open(presenterUrl(), 'seating-present', features);
+  if (!granted) {
+    w.getScreenDetails().catch(() => {});
+    return;
+  }
+  try {
+    const { screens, currentScreen: cur } = await w.getScreenDetails();
+    const other = screens.find((s) => s.availLeft !== cur.availLeft || s.availTop !== cur.availTop);
+    if (!other) return;
+    win.moveTo(other.availLeft, other.availTop);
+    win.resizeTo(other.availWidth, other.availHeight);
+  } catch {
+    // Denied or the window was closed: leave it where it is.
+  }
+}
+
+/**
+ * Opens the presenter window. `window.open` runs synchronously inside the click gesture (an await
+ * before it would let user activation expire and get the popup blocked); moving it to the second
+ * screen happens afterwards. Resolves to null when the popup was blocked.
+ */
+export function openPresenterWindow(): Promise<Window | null> {
+  const win = window.open(presenterUrl(), 'seating-present', 'popup,width=1280,height=720');
+  if (win) void moveToOtherScreen(win);
+  return Promise.resolve(win);
 }
 
 function todayLabel(): string {
