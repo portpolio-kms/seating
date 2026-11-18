@@ -33,6 +33,8 @@ describe('ConstraintEditor', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('이미 반드시 짝인 친구가 있는 학생이에요');
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     expect(spy).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('학생 2'), { target: { value: 's3' } });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
   it('shows conflict messages at the bottom', () => {
     const cls = make({ mode: 'group' });
@@ -48,7 +50,16 @@ describe('ConstraintEditor', () => {
   it('shows the ok message when fine, and the help table', () => {
     render(<ConstraintEditor cls={make()} onChange={() => {}} />);
     expect(screen.getByText('현재 설정으로 배치할 수 있어요')).toBeInTheDocument();
-    expect(screen.getAllByText('같은 책상 불가').length).toBeGreaterThan(0);
+    const rows: [string, string, string][] = [
+      ['짝 금지', '같은 책상 불가', '제한 없음'],
+      ['모둠 금지', '같은 책상 불가', '같은 모둠 불가'],
+      ['반드시 짝', '같은 책상', '같은 모둠'],
+      ['반드시 같은 모둠', '제한 없음', '같은 모둠'],
+    ];
+    for (const [label, pair, group] of rows) {
+      const cells = screen.getByRole('rowheader', { name: label }).closest('tr')!.querySelectorAll('td');
+      expect([cells[0].textContent, cells[1].textContent]).toEqual([pair, group]);
+    }
   });
   it('deletes a constraint', () => {
     const cls = make();

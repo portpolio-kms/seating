@@ -19,7 +19,7 @@ const HELP: { label: string; pair: string; group: string }[] = [
   { label: '짝 금지', pair: '같은 책상 불가', group: '제한 없음' },
   { label: '모둠 금지', pair: '같은 책상 불가', group: '같은 모둠 불가' },
   { label: '반드시 짝', pair: '같은 책상', group: '같은 모둠' },
-  { label: '반드시 같은 모둠', pair: '같은 책상', group: '같은 모둠' },
+  { label: '반드시 같은 모둠', pair: '제한 없음', group: '같은 모둠' },
 ];
 
 export function ConstraintEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c: ClassRecord) => void }) {
@@ -43,12 +43,18 @@ export function ConstraintEditor({ cls, onChange }: { cls: ClassRecord; onChange
     setB('');
   };
 
-  const remove = (id: string) => onChange({ ...cls, constraints: cls.constraints.filter((c) => c.id !== id) });
+  const remove = (id: string) => {
+    setError(null);
+    onChange({ ...cls, constraints: cls.constraints.filter((c) => c.id !== id) });
+  };
 
   const problems = validateConstraints(cls.students, cls.constraints, cls.layout);
 
   const studentSelect = (label: string, value: string, set: (v: string) => void) => (
-    <select aria-label={label} className={field} value={value} onChange={(e) => set(e.target.value)}>
+    <select aria-label={label} className={field} value={value} onChange={(e) => {
+        setError(null);
+        set(e.target.value);
+      }}>
       <option value="">{label}</option>
       {sorted.map((s) => (
         <option key={s.id} value={s.id}>
@@ -107,8 +113,8 @@ export function ConstraintEditor({ cls, onChange }: { cls: ClassRecord; onChange
           <p className="rounded bg-green-100 px-3 py-2 text-green-900">현재 설정으로 배치할 수 있어요</p>
         ) : (
           <div className="rounded bg-amber-100 px-3 py-2 text-amber-900">
-            {problems.map((m) => (
-              <p key={m}>{m}</p>
+            {problems.map((m, i) => (
+              <p key={i}>{m}</p>
             ))}
           </div>
         )}
