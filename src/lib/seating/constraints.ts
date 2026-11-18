@@ -24,7 +24,7 @@ export function effectiveConstraints(cs: PairConstraint[], mode: LayoutMode): Ef
   return { together: pick(TOGETHER_KINDS[mode]), apart: pick(APART_KINDS[mode]) };
 }
 
-function togetherClusters(pairs: [string, string][]): string[][] {
+export function togetherClusters(pairs: [string, string][]): string[][] {
   const parent = new Map<string, string>();
   const find = (x: string): string => {
     let r = x;
