@@ -3,4 +3,4 @@ node_modules
 out
 .superpowers
 *.tsbuildinfo
-tsconfig.tsbuildinfo
+.claude/
