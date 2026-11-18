@@ -26,6 +26,25 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
   return items;
 }
 
+/** Number of ways to choose k of n seats. */
+function choose(n: number, k: number): number {
+  let r = 1;
+  for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1);
+  return r;
+}
+
+/**
+ * Random order of items without replacement where each next item is drawn with probability
+ * proportional to its weight (Efraimidis–Spirakis keys). Zero-weight items are dropped.
+ */
+function weightedOrder(weights: number[], rng: Rng): number[] {
+  return weights
+    .map((w, i) => ({ i, w, key: w > 0 ? Math.pow(rng(), 1 / w) : -1 }))
+    .filter((e) => e.w > 0)
+    .sort((a, b) => b.key - a.key)
+    .map((e) => e.i);
+}
+
 function clashes(id: string, members: string[], apart: ApartMap, ignore?: string): boolean {
   const avoid = apart.get(id);
   return !!avoid && members.some((m) => m !== ignore && avoid.has(m));
@@ -48,9 +67,11 @@ function placeChunks(chunks: string[][], units: Unit[], apart: ApartMap, rng: Rn
     const place = (i: number): boolean => {
       if (i === order.length) return true;
       const chunk = order[i];
-      for (const u of shuffle(units.map((_, k) => k), rng)) {
+      // Weight each unit by the number of seat sets the chunk could take there, so a chunk lands on a
+      // uniformly random set of free seats no matter when it is placed (spec 5.4: no visible pattern).
+      const weights = units.map((unit, u) => choose(unit.seats.length - occupants[u].length, chunk.length));
+      for (const u of weightedOrder(weights, rng)) {
         const here = occupants[u];
-        if (units[u].seats.length - here.length < chunk.length) continue;
         if (chunk.some((id) => clashes(id, here, apart))) continue;
         if (++nodes > NODE_LIMIT) {
           aborted = true;

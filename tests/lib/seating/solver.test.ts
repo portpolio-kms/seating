@@ -84,6 +84,22 @@ describe('generateSeating', () => {
     }
   });
 
+  it('seats a constrained student at the solo desk no more often than seat-uniform chance', () => {
+    // 11 two-seat desks + 1 solo desk = 23 seats for 16 students.
+    const layout: Layout = { mode: 'pair', rows: 4, cols: 3, groupSize: 4, disabledSeats: ['u0-0-s1'] };
+    const cs = [c('1', ids[0], ids[1], 'avoid-pair')]; // ids[0] has a hidden constraint
+    const runs = 3000;
+    let solo = 0;
+    for (let seed = 1; seed <= runs; seed++) {
+      const r = solve(seed, layout, cs);
+      if (!r.ok) throw new Error('unexpected failure');
+      if (r.assignment['u0-0-s0'] === ids[0]) solo++;
+    }
+    const rate = solo / runs; // seat-uniform expectation 1/23 ≈ 0.043; unit-uniform would be 1/12 ≈ 0.083
+    expect(rate).toBeGreaterThan(0.03);
+    expect(rate).toBeLessThan(0.06);
+  });
+
   it('fails when four mutually avoid-group students must fit in three groups', () => {
     const layout: Layout = { mode: 'group', rows: 1, cols: 3, groupSize: 6, disabledSeats: [] };
     const four = ids.slice(0, 4);
