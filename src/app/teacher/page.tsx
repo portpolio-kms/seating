@@ -1,5 +1,6 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PinGate } from '@/components/PinGate';
 import { BackupPanel } from '@/components/teacher/BackupPanel';
@@ -275,11 +276,17 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
   );
 }
 
+/** Reads `?from=classroom` (set by the classroom home) so the PIN gate warns first that the TV may show this screen. */
+function TeacherEntry() {
+  const fromClassroom = useSearchParams()?.get('from') === 'classroom';
+  return <TeacherApp warnOnScreen={fromClassroom} />;
+}
+
 export default function TeacherPage() {
-  // Suspense boundary: Task 12 reads `?from=classroom` with useSearchParams to set warnOnScreen.
+  // Suspense boundary: useSearchParams needs it for static export.
   return (
     <Suspense fallback={null}>
-      <TeacherApp warnOnScreen={false} />
+      <TeacherEntry />
     </Suspense>
   );
 }
