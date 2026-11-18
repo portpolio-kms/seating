@@ -1,0 +1,74 @@
+import { describe, it, expect } from 'vitest';
+import { openTeacherChannel, openPresenterChannel, toStageView } from '@/lib/channel';
+import type { ToPresenter, ToTeacher } from '@/lib/channel';
+import type { ClassRecord } from '@/lib/db/repo';
+
+const wait = () => new Promise((r) => setTimeout(r, 50));
+
+function cls(): ClassRecord {
+  return {
+    id: 'c1',
+    name: '3반',
+    students: [
+      { id: 's1', number: 1, name: '가온', gender: 'F' },
+      { id: 's2', number: 2, name: '나래', gender: 'M' },
+      { id: 's3', number: 3, name: '나래', gender: 'M' },
+    ],
+    layout: { mode: 'pair', rows: 1, cols: 2, groupSize: 4, disabledSeats: [] },
+    constraints: [{ id: 'k1', a: 's1', b: 's2', kind: 'avoid-pair' }],
+    genderRule: true,
+    lastRevealStyle: 'A',
+    createdAt: '2026-01-01',
+  };
+}
+
+describe('channel', () => {
+  it('teacher reveal reaches presenter as equal object', async () => {
+    const got: ToPresenter[] = [];
+    const p = openPresenterChannel((m) => got.push(m));
+    const t = openTeacherChannel(() => {});
+    const msg: ToPresenter = {
+      type: 'reveal', revealId: 'r1', style: 'B', speed: 2,
+      stage: { className: '3반', mode: 'pair', rows: 1, cols: 1, units: [] },
+    };
+    t.send(msg);
+    await wait();
+    expect(got).toEqual([msg]);
+    t.close(); p.close();
+  });
+
+  it('presenter hello reaches teacher', async () => {
+    const got: ToTeacher[] = [];
+    const t = openTeacherChannel((m) => got.push(m));
+    const p = openPresenterChannel(() => {});
+    p.send({ type: 'hello' });
+    await wait();
+    expect(got).toEqual([{ type: 'hello' }]);
+    t.close(); p.close();
+  });
+
+  it('closed channel stops receiving', async () => {
+    const got: ToPresenter[] = [];
+    const p = openPresenterChannel((m) => got.push(m));
+    const t = openTeacherChannel(() => {});
+    p.close();
+    t.send({ type: 'speed', revealId: 'r', speed: 1 });
+    await wait();
+    expect(got).toEqual([]);
+    t.close();
+  });
+
+  it('toStageView carries names only, no constraint data', () => {
+    const c = cls();
+    const a = { 'u0-0-s0': 's1', 'u0-0-s1': 's2', 'u0-1-s0': 's3', 'u0-1-s1': null };
+    const v = toStageView(c, a);
+    const json = JSON.stringify(v);
+    for (const w of ['constraints', 'avoid', 'must', 'genderRule', 'students', 'gender']) {
+      expect(json).not.toContain(w);
+    }
+    expect(v.className).toBe('3반');
+    expect(v.units).toHaveLength(2);
+    const names = v.units.flatMap((u) => u.seats.map((s) => s.name));
+    expect(names).toEqual(['가온', '나래(2)', '나래(3)', null]);
+  });
+});
