@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { openTeacherChannel, openPresenterChannel, toStageView } from '@/lib/channel';
+import { CHANNEL_NAME, openTeacherChannel, openPresenterChannel, recordToStageView, toStageView } from '@/lib/channel';
 import type { ToPresenter, ToTeacher } from '@/lib/channel';
 import type { ClassRecord } from '@/lib/db/repo';
 
@@ -70,5 +70,36 @@ describe('channel', () => {
     expect(v.units).toHaveLength(2);
     const names = v.units.flatMap((u) => u.seats.map((s) => s.name));
     expect(names).toEqual(['가온', '나래(2)', '나래(3)', null]);
+  });
+
+  it('ignores messages without a known string type (other apps on the same origin)', async () => {
+    const toPresenter: unknown[] = [];
+    const toTeacher: unknown[] = [];
+    const p = openPresenterChannel((m) => toPresenter.push(m));
+    const t = openTeacherChannel((m) => toTeacher.push(m));
+    const stranger = new BroadcastChannel(CHANNEL_NAME);
+    for (const junk of [null, 'hello', 42, {}, { type: 7 }, { type: 'unknown' }, ['hello'], { kind: 'idle' }]) {
+      stranger.postMessage(junk);
+    }
+    // Each side also drops the other side's types.
+    stranger.postMessage({ type: 'hello' });
+    stranger.postMessage({ type: 'idle', view: { kind: 'title', className: 'x', date: 'y' } });
+    await wait();
+    expect(toPresenter).toEqual([{ type: 'idle', view: { kind: 'title', className: 'x', date: 'y' } }]);
+    expect(toTeacher).toEqual([{ type: 'hello' }]);
+    stranger.close(); t.close(); p.close();
+  });
+
+  it('recordToStageView uses the saved names and layout of the record', () => {
+    const v = recordToStageView('3반', {
+      id: 'r1',
+      classId: 'c1',
+      createdAt: '2026-01-01',
+      layout: { mode: 'pair', rows: 1, cols: 1, groupSize: 4, disabledSeats: [] },
+      assignment: { 'u0-0-s0': 'old', 'u0-0-s1': null },
+      studentNames: { old: '전학간학생' },
+    });
+    expect(v.className).toBe('3반');
+    expect(v.units.flatMap((u) => u.seats.map((s) => s.name))).toEqual(['전학간학생', null]);
   });
 });

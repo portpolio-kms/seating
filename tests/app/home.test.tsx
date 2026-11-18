@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { hashPin } from '@/lib/auth/pin';
-import { listSeatingRecords, saveClass, saveSettings, wipeAll, type ClassRecord } from '@/lib/db/repo';
+import { deleteClass, listSeatingRecords, saveClass, saveSettings, wipeAll, type ClassRecord } from '@/lib/db/repo';
 import Home from '@/app/page';
 
 const names = ['가온', '나래', '다온', '라희'];
@@ -100,6 +100,34 @@ describe('classroom home: cancel confirm', () => {
     const text = document.body.textContent ?? '';
     for (const n of names) expect(text).toContain(n);
     expect(document.querySelector('main')?.textContent).toBe(before);
+    expect(await listSeatingRecords('c1')).toHaveLength(0);
+  }, 20000);
+});
+
+describe('classroom home: confirm gate safety', () => {
+  async function reachPinStep() {
+    await saveSettings({ pinSalt: 'salt', pinHash: await hashPin('1234', 'salt') });
+    await saveClass(mkClass());
+    render(<Home />);
+    fireEvent.click(await screen.findByRole('button', { name: '자리 뽑기' }));
+    fireEvent.click(screen.getByRole('button', { name: /A 한 번에/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '확정' }, { timeout: 10000 }));
+    fireEvent.click(await screen.findByRole('button', { name: '계속' }));
+    return screen.findByLabelText('PIN');
+  }
+
+  it('the confirm PIN gate offers no forgot/wipe path', async () => {
+    await reachPinStep();
+    expect(screen.queryByRole('button', { name: 'PIN을 잊었어요' })).toBeNull();
+    expect(screen.queryByText(/모든 데이터/)).toBeNull();
+  }, 20000);
+
+  it('does not write a record when the class was deleted meanwhile', async () => {
+    const pin = await reachPinStep();
+    await deleteClass('c1');
+    fireEvent.change(pin, { target: { value: '1234' } });
+    fireEvent.click(screen.getByRole('button', { name: '확인' }));
+    expect(await screen.findByText('교사 화면에서 학급을 먼저 만들어 주세요')).toBeInTheDocument();
     expect(await listSeatingRecords('c1')).toHaveLength(0);
   }, 20000);
 });

@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PinGate } from '@/components/PinGate';
 import { RevealStage } from '@/components/reveal/RevealStage';
 import { SeatingChart } from '@/components/SeatingChart';
-import { toStageView, type StageView } from '@/lib/channel';
+import { recordToStageView, toStageView } from '@/lib/channel';
 import {
   addSeatingRecord,
+  getClass,
   getSettings,
   listClasses,
   listSeatingRecords,
@@ -16,7 +17,6 @@ import {
   type SeatingRecord,
 } from '@/lib/db/repo';
 import { displayName } from '@/lib/roster';
-import { buildUnits } from '@/lib/seating/layout';
 import { generateSeating } from '@/lib/seating/solver';
 import type { Assignment } from '@/lib/seating/types';
 
@@ -38,25 +38,6 @@ const primary = `${big} bg-blue-600 text-white hover:bg-blue-700`;
 const secondary = `${big} border-2 border-slate-300 bg-white hover:bg-slate-50`;
 const TEACHER_HREF = '/teacher/?from=classroom';
 
-/** Chart from a saved record, using the names saved at confirmation time. */
-function recordStage(cls: ClassRecord, rec: SeatingRecord): StageView {
-  return {
-    className: cls.name,
-    mode: rec.layout.mode,
-    rows: rec.layout.rows,
-    cols: rec.layout.cols,
-    units: buildUnits(rec.layout).map((u) => ({
-      id: u.id,
-      row: u.row,
-      col: u.col,
-      seats: u.seats.map((seatId) => {
-        const sid = rec.assignment[seatId];
-        return { seatId, name: sid ? (rec.studentNames[sid] ?? null) : null };
-      }),
-    })),
-  };
-}
-
 export default function Home() {
   const [cls, setCls] = useState<ClassRecord | null | undefined>(undefined);
   const [view, setView] = useState<View>({ kind: 'home' });
@@ -66,25 +47,27 @@ export default function Home() {
   const [confirming, setConfirming] = useState(false);
   const alive = useRef(true);
 
+  const reload = useCallback(async () => {
+    try {
+      const [classes, settings] = await Promise.all([listClasses(), getSettings()]);
+      classes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const active = classes.find((c) => c.id === settings.activeClassId) ?? classes[0] ?? null;
+      const records = active ? await listSeatingRecords(active.id) : [];
+      if (!alive.current) return;
+      setCls(active);
+      setLast(records[0] ?? null);
+    } catch {
+      if (alive.current) setCls(null);
+    }
+  }, []);
+
   useEffect(() => {
     alive.current = true;
-    (async () => {
-      try {
-        const [classes, settings] = await Promise.all([listClasses(), getSettings()]);
-        classes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        const active = classes.find((c) => c.id === settings.activeClassId) ?? classes[0] ?? null;
-        const records = active ? await listSeatingRecords(active.id) : [];
-        if (!alive.current) return;
-        setCls(active);
-        setLast(records[0] ?? null);
-      } catch {
-        if (alive.current) setCls(null);
-      }
-    })();
+    void reload();
     return () => {
       alive.current = false;
     };
-  }, []);
+  }, [reload]);
 
   const stage = useMemo(() => {
     if (!cls || view.kind !== 'reveal') return null;
@@ -119,6 +102,20 @@ export default function Home() {
   };
 
   const confirm = async (style: RevealStyle, assignment: Assignment) => {
+    // The class may have been deleted (or all data wiped) in the teacher window meanwhile:
+    // never write a record for a class that no longer exists.
+    let exists = false;
+    try {
+      exists = (await getClass(cls.id)) !== undefined;
+    } catch {
+      // Storage unreadable: treated like a missing class below.
+    }
+    if (!exists) {
+      setConfirming(false);
+      setView({ kind: 'home' });
+      await reload();
+      return;
+    }
     const rec: SeatingRecord = {
       id: crypto.randomUUID(),
       classId: cls.id,
@@ -148,6 +145,7 @@ export default function Home() {
           <div className="fixed inset-0 z-50">
             <PinGate
               warnOnScreen
+              allowForgot={false}
               onUnlock={() => void confirm(view.style, view.assignment)}
               onCancel={() => setConfirming(false)}
             />
@@ -190,7 +188,7 @@ export default function Home() {
     return (
       <main className="flex min-h-screen flex-col items-center gap-8 bg-slate-50 p-6">
         {last ? (
-          <SeatingChart stage={recordStage(cls, last)} size="tv" />
+          <SeatingChart stage={recordToStageView(cls.name, last)} size="tv" />
         ) : (
           <p className="mt-24 text-4xl font-bold">아직 확정된 좌석표가 없어요</p>
         )}

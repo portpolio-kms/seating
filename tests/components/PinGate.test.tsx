@@ -70,13 +70,35 @@ describe('PinGate unlock', () => {
     expect(await screen.findByLabelText('PIN')).toBeInTheDocument();
   });
 
-  it('forgot PIN wipes data after confirm and shows setup', async () => {
-    render(<PinGate onUnlock={() => {}} />);
+  it('forgot PIN wipes data only after typing 모두 지우기, then shows setup', async () => {
+    const onWiped = vi.fn();
+    render(<PinGate onUnlock={() => {}} onWiped={onWiped} />);
     fireEvent.click(await screen.findByRole('button', { name: 'PIN을 잊었어요' }));
     expect(screen.getByText('모든 데이터를 지우고 새로 시작할까요? 되돌릴 수 없어요.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '모든 데이터를 지우고 새로 시작' }));
+    expect(screen.getByText(/지우기 전에 백업 파일이 있는지 확인하세요/)).toBeInTheDocument();
+    expect(screen.getByText(/백업 가져오기로 복원할 수 있어요/)).toBeInTheDocument();
+    const wipeBtn = screen.getByRole('button', { name: '모든 데이터를 지우고 새로 시작' });
+    expect(wipeBtn).toBeDisabled();
+    type(screen.getByLabelText('확인 문구'), '모두지우기');
+    expect(wipeBtn).toBeDisabled();
+    fireEvent.click(wipeBtn);
+    fireEvent.submit(wipeBtn.closest('form')!);
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await getSettings()).pinHash).not.toBeNull();
+    expect(onWiped).not.toHaveBeenCalled();
+    type(screen.getByLabelText('확인 문구'), '모두 지우기');
+    expect(wipeBtn).toBeEnabled();
+    fireEvent.click(wipeBtn);
     await screen.findByText('PIN 정하기');
     expect((await getSettings()).pinHash).toBeNull();
+    expect(onWiped).toHaveBeenCalledTimes(1);
+  });
+
+  it('allowForgot={false} offers no forgot/wipe path', async () => {
+    render(<PinGate onUnlock={() => {}} allowForgot={false} />);
+    await screen.findByLabelText('PIN');
+    expect(screen.queryByRole('button', { name: 'PIN을 잊었어요' })).toBeNull();
+    expect(screen.queryByText(/모든 데이터/)).toBeNull();
   });
 });
 
