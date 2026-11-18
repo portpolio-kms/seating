@@ -1,0 +1,162 @@
+import { useState } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { DrawPanel, type TeacherChannel } from '@/components/teacher/DrawPanel';
+import type { ToPresenter, ToTeacher } from '@/lib/channel';
+import { listSeatingRecords, saveClass, wipeAll, type ClassRecord } from '@/lib/db/repo';
+import type { PairConstraint } from '@/lib/seating/types';
+
+function fakeChannel() {
+  let listener: ((m: ToTeacher) => void) | undefined;
+  const send = vi.fn<(m: ToPresenter) => void>();
+  const channel: TeacherChannel = {
+    send,
+    subscribe: (fn) => {
+      listener = fn;
+      return () => {
+        listener = undefined;
+      };
+    },
+  };
+  return { channel, send, emit: (m: ToTeacher) => act(() => listener?.(m)) };
+}
+
+const make = (constraints: PairConstraint[] = []): ClassRecord => ({
+  id: 'c1',
+  name: '6학년 1반',
+  students: ['가온', '나래', '다온', '라희'].map((name, i) => ({ id: `s${i}`, number: i + 1, name, gender: null })),
+  layout: { mode: 'pair', rows: 1, cols: 2, groupSize: 4, disabledSeats: [] },
+  constraints,
+  genderRule: false,
+  lastRevealStyle: 'A',
+  createdAt: '2026-01-01T00:00:00.000Z',
+});
+
+function Harness({ initial, channel }: { initial: ClassRecord; channel: TeacherChannel }) {
+  const [cls, setCls] = useState(initial);
+  return <DrawPanel cls={cls} channel={channel} onChange={setCls} />;
+}
+
+async function renderPanel(cls: ClassRecord) {
+  await saveClass(cls);
+  const fake = fakeChannel();
+  render(<Harness initial={cls} channel={fake.channel} />);
+  // Wait for the initial "last confirmed record" lookup to settle.
+  await screen.findByRole('button', { name: '마지막 확정 좌석표' });
+  return fake;
+}
+
+const sentOfType = (send: ReturnType<typeof fakeChannel>['send'], type: ToPresenter['type']) =>
+  send.mock.calls.map(([m]) => m).filter((m) => m.type === type);
+
+async function drawAndFinish() {
+  fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+  fireEvent.click(screen.getByRole('button', { name: '나머지 바로 공개' }));
+  await screen.findByRole('button', { name: '이대로 확정' });
+}
+
+beforeEach(async () => {
+  await wipeAll();
+});
+
+describe('DrawPanel', () => {
+  it('impossible constraints in pair mode: shows reasons and sends nothing to the presenter', async () => {
+    const { send } = await renderPanel(
+      make([
+        { id: 'k1', a: 's0', b: 's1', kind: 'must-pair' },
+        { id: 'k2', a: 's0', b: 's1', kind: 'avoid-pair' },
+      ]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('떨어져야 하는 조건');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('a successful draw sends exactly one reveal without constraint data', async () => {
+    const { send } = await renderPanel(make([{ id: 'k1', a: 's0', b: 's1', kind: 'avoid-pair' }]));
+    fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+    expect(send).toHaveBeenCalledTimes(1);
+    const msg = send.mock.calls[0][0];
+    expect(msg.type).toBe('reveal');
+    expect(JSON.stringify(msg)).not.toMatch(/constraint|avoid|must|violation|kind|위반|금지/);
+    expect(screen.getByText('조건 위반 0건')).toBeInTheDocument();
+  });
+
+  it('hello during a reveal re-sends the same reveal (same revealId)', async () => {
+    const { send, emit } = await renderPanel(make());
+    fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+    const first = send.mock.calls[0][0];
+    emit({ type: 'hello' });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0]).toEqual(first);
+  });
+
+  it('flips from the presenter are mirrored in the preview (style C)', async () => {
+    const { send, emit } = await renderPanel({ ...make(), lastRevealStyle: 'C' });
+    fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+    const msg = send.mock.calls[0][0];
+    if (msg.type !== 'reveal') throw new Error('expected reveal');
+    const seat = msg.stage.units[0].seats[0];
+    expect(screen.getByTestId(`seat-${seat.seatId}`)).toHaveTextContent('?');
+    emit({ type: 'flipped', revealId: msg.revealId, seatId: seat.seatId });
+    expect(screen.getByTestId(`seat-${seat.seatId}`)).toHaveTextContent(seat.name!);
+  });
+
+  it('a card click in the preview sends control:flip (style C)', async () => {
+    const { send } = await renderPanel({ ...make(), lastRevealStyle: 'C' });
+    fireEvent.click(screen.getByRole('button', { name: '뽑기 시작' }));
+    const msg = send.mock.calls[0][0];
+    if (msg.type !== 'reveal') throw new Error('expected reveal');
+    const seatId = msg.stage.units[0].seats[1].seatId;
+    fireEvent.click(screen.getByTestId(`seat-${seatId}`));
+    expect(send).toHaveBeenLastCalledWith({ type: 'control', revealId: msg.revealId, action: 'flip', seatId });
+  });
+
+  it('confirm saves one record and sends idle chart', async () => {
+    const { send } = await renderPanel(make());
+    await drawAndFinish();
+    fireEvent.click(screen.getByRole('button', { name: '이대로 확정' }));
+    await waitFor(async () => expect(await listSeatingRecords('c1')).toHaveLength(1));
+    await waitFor(() => {
+      const last = send.mock.calls.at(-1)![0];
+      expect(last.type === 'idle' && last.view.kind === 'chart').toBe(true);
+    });
+  });
+
+  it('warns when a swap puts an avoid-pair together, without blocking', async () => {
+    const { send } = await renderPanel(make([{ id: 'k1', a: 's0', b: 's1', kind: 'avoid-pair' }]));
+    await drawAndFinish();
+    const msg = send.mock.calls[0][0];
+    if (msg.type !== 'reveal') throw new Error('expected reveal');
+    const seats = msg.stage.units.flatMap((u) => u.seats.map((s) => ({ ...s, unit: u.id })));
+    const gaon = seats.find((s) => s.name === '가온')!;
+    const narae = seats.find((s) => s.name === '나래')!;
+    const mate = seats.find((s) => s.unit === gaon.unit && s.seatId !== gaon.seatId)!;
+    expect(screen.queryByText(/짝 금지 조건과 겹쳐요/)).toBeNull();
+    fireEvent.click(screen.getByTestId(`seat-${narae.seatId}`));
+    fireEvent.click(screen.getByTestId(`seat-${mate.seatId}`));
+    expect(screen.getByText('⚠ 가온·나래: 짝 금지 조건과 겹쳐요')).toBeInTheDocument();
+    expect(screen.getByTestId(`seat-${mate.seatId}`)).toHaveTextContent('나래');
+    // The presenter only ever gets names: the swap result goes out as a plain chart.
+    const last = send.mock.calls.at(-1)![0];
+    expect(last.type).toBe('idle');
+    expect(JSON.stringify(last)).not.toMatch(/constraint|avoid|위반|금지/);
+  });
+
+  it('idle choice sends the class title immediately', async () => {
+    const { send } = await renderPanel(make());
+    fireEvent.click(screen.getByRole('button', { name: '학급 이름' }));
+    const m = send.mock.calls[0][0];
+    expect(m.type === 'idle' && m.view.kind === 'title' && m.view.className).toBe('6학년 1반');
+  });
+
+  it('remembers the chosen reveal style', async () => {
+    const spy = vi.fn();
+    await saveClass(make());
+    const { channel } = fakeChannel();
+    render(<DrawPanel cls={make()} channel={channel} onChange={spy} />);
+    await screen.findByRole('button', { name: '마지막 확정 좌석표' });
+    fireEvent.click(screen.getByRole('button', { name: /카드 뒤집기/ }));
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ lastRevealStyle: 'C' }));
+  });
+});

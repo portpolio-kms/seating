@@ -3,3 +3,18 @@
 body {
   font-family: var(--font-noto-sans-kr), sans-serif;
 }
+
+/* Printing a past seating chart: only the .print-area block is printed. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 0 auto 0;
+  }
+}
