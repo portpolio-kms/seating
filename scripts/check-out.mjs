@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT_DIR = 'out';
-const EXTERNAL = /<[^>]*\b(?:src|href)\s*=\s*["']?https?:\/\//i;
+const EXTERNAL = /<[^>]*\b(?:src|href)\s*=\s*["']?(?:https?:)?\/\//i;
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
