@@ -25,7 +25,6 @@ type View =
   | { kind: 'pick' }
   | { kind: 'error' }
   | { kind: 'reveal'; id: string; style: RevealStyle; assignment: Assignment }
-  | { kind: 'confirming'; style: RevealStyle; assignment: Assignment }
   | { kind: 'chart' };
 
 const STYLES: { style: RevealStyle; label: string }[] = [
@@ -64,6 +63,7 @@ export default function Home() {
   const [last, setLast] = useState<SeatingRecord | null>(null);
   const [revealDone, setRevealDone] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -132,20 +132,27 @@ export default function Home() {
     } catch {
       setSaveError(true);
       setRevealDone(true);
-      setView({ kind: 'reveal', id: crypto.randomUUID(), style: 'A', assignment });
+      setConfirming(false);
+      setView({ kind: 'reveal', id: crypto.randomUUID(), style, assignment });
       return;
     }
     setLast(rec);
+    setConfirming(false);
     setView({ kind: 'chart' });
   };
-
-  if (view.kind === 'confirming') {
-    return <PinGate warnOnScreen onUnlock={() => void confirm(view.style, view.assignment)} />;
-  }
 
   if (view.kind === 'reveal' && stage) {
     return (
       <main className="flex min-h-screen flex-col gap-6 bg-slate-50 p-6">
+        {confirming && (
+          <div className="fixed inset-0 z-50">
+            <PinGate
+              warnOnScreen
+              onUnlock={() => void confirm(view.style, view.assignment)}
+              onCancel={() => setConfirming(false)}
+            />
+          </div>
+        )}
         <div className="flex-1">
           <RevealStage
             key={view.id}
@@ -169,7 +176,7 @@ export default function Home() {
             <button
               type="button"
               className={primary}
-              onClick={() => setView({ kind: 'confirming', style: view.style, assignment: view.assignment })}
+              onClick={() => setConfirming(true)}
             >
               확정
             </button>

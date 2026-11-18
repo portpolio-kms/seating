@@ -12,7 +12,16 @@ const primaryButton = 'w-full rounded-lg bg-blue-600 px-4 py-3 text-lg font-semi
 
 const stepFor = (s: AppSettings): Step => (s.pinHash && s.pinSalt ? 'unlock' : 'setup');
 
-export function PinGate({ onUnlock, warnOnScreen = false }: { onUnlock: () => void; warnOnScreen?: boolean }) {
+export function PinGate({
+  onUnlock,
+  warnOnScreen = false,
+  onCancel,
+}: {
+  onUnlock: () => void;
+  warnOnScreen?: boolean;
+  /** When given, the warn and unlock steps offer a way back (used by the classroom home). */
+  onCancel?: () => void;
+}) {
   const [step, setStep] = useState<Step>('loading');
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [pin, setPin] = useState('');
@@ -68,6 +77,11 @@ export function PinGate({ onUnlock, warnOnScreen = false }: { onUnlock: () => vo
             <button type="button" className={primaryButton} onClick={() => settings && setStep(stepFor(settings))}>
               계속
             </button>
+            {onCancel && (
+              <button type="button" className="w-full text-sm text-slate-500 underline" onClick={onCancel}>
+                돌아가기
+              </button>
+            )}
           </>
         )}
 
@@ -112,6 +126,11 @@ export function PinGate({ onUnlock, warnOnScreen = false }: { onUnlock: () => vo
               확인
             </button>
             <p className="text-center text-sm text-slate-500">이 잠금은 학생이 지나가다 보는 것을 막는 용도예요.</p>
+            {onCancel && (
+              <button type="button" className="w-full text-sm text-slate-500 underline" onClick={onCancel}>
+                돌아가기
+              </button>
+            )}
             {step === 'unlock' && (
               <button
                 type="button"

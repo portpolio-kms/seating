@@ -82,3 +82,24 @@ describe('classroom home', () => {
     forbidden();
   }, 20000);
 });
+
+describe('classroom home: cancel confirm', () => {
+  it('돌아가기 returns to the same revealed result without saving', async () => {
+    await saveSettings({ pinSalt: 'salt', pinHash: await hashPin('1234', 'salt') });
+    await saveClass(mkClass());
+    render(<Home />);
+    fireEvent.click(await screen.findByRole('button', { name: '자리 뽑기' }));
+    fireEvent.click(screen.getByRole('button', { name: /A 한 번에/ }));
+    const confirmBtn = await screen.findByRole('button', { name: '확정' }, { timeout: 10000 });
+    const before = document.querySelector('main')?.textContent;
+    fireEvent.click(confirmBtn);
+    fireEvent.click(await screen.findByRole('button', { name: '돌아가기' }));
+    expect(screen.queryByText(/TV에 보일 수 있어요/)).toBeNull();
+    expect(screen.getByRole('button', { name: '확정' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다시 뽑기' })).toBeInTheDocument();
+    const text = document.body.textContent ?? '';
+    for (const n of names) expect(text).toContain(n);
+    expect(document.querySelector('main')?.textContent).toBe(before);
+    expect(await listSeatingRecords('c1')).toHaveLength(0);
+  }, 20000);
+});

@@ -79,3 +79,22 @@ describe('PinGate unlock', () => {
     expect((await getSettings()).pinHash).toBeNull();
   });
 });
+
+describe('PinGate onCancel', () => {
+  it('offers 돌아가기 only when onCancel is given, on warn and unlock steps', async () => {
+    const salt = newSalt();
+    await saveSettings({ pinSalt: salt, pinHash: await hashPin('1234', salt) });
+    const { unmount } = render(<PinGate onUnlock={vi.fn()} warnOnScreen />);
+    await screen.findByText(/TV에 보일 수 있어요/);
+    expect(screen.queryByRole('button', { name: '돌아가기' })).toBeNull();
+    unmount();
+
+    const onCancel = vi.fn();
+    render(<PinGate onUnlock={vi.fn()} warnOnScreen onCancel={onCancel} />);
+    await screen.findByText(/TV에 보일 수 있어요/);
+    fireEvent.click(screen.getByRole('button', { name: '계속' }));
+    await screen.findByLabelText('PIN');
+    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
