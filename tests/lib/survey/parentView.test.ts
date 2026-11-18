@@ -94,3 +94,56 @@ describe('buildParentCard', () => {
     }
   });
 });
+
+describe('maskNames bypass regressions', () => {
+  it('compound surname: given name is masked', () => {
+    const r = [stu('a', 1, '남궁민수')];
+    expect(maskNames('민수야 미안', r)).toBe('○○야 미안');
+    expect(maskNames('남궁민수가 때렸어요', r)).toBe('○○가 때렸어요');
+    expect(containsStudentName('민수야 미안', r)).toBe(true);
+  });
+  it('2-char names: second char masked before 이/아/야 only', () => {
+    const r = [stu('a', 1, '이준'), stu('b', 2, '김솔')];
+    expect(maskNames('준이가 때렸어요', r)).toBe('○○이가 때렸어요');
+    expect(maskNames('솔아 미안', r)).toBe('○○아 미안');
+    expect(maskNames('준비물을 챙겼어요', r)).toBe('준비물을 챙겼어요');
+    expect(containsStudentName('준이가 때렸어요', r)).toBe(true);
+    expect(containsStudentName('준비물', r)).toBe(false);
+  });
+  it('whitespace in roster name or text', () => {
+    const r = [stu('a', 1, '김 가온')];
+    expect(maskNames('김가온이랑 놀아요. 가온이가 해요', r)).toBe('○○이랑 놀아요. ○○이가 해요');
+    expect(maskNames('김 가온이랑', r)).toBe('○○이랑');
+    expect(containsStudentName('김 가온이랑', r)).toBe(true);
+    expect(containsStudentName('김가온이랑', r)).toBe(true);
+  });
+  it('case-insensitive romanized names', () => {
+    const r = [stu('a', 1, 'Daniel')];
+    expect(maskNames('daniel이랑 DANIEL', r)).toBe('○○이랑 ○○');
+    expect(containsStudentName('daniel', r)).toBe(true);
+  });
+  it('NFC normalizes decomposed text', () => {
+    const r = [stu('a', 1, '김가온')];
+    expect(maskNames('김가온이랑'.normalize('NFD'), r)).toBe('○○이랑');
+    expect(containsStudentName('김가온'.normalize('NFD'), r)).toBe(true);
+  });
+  it('leak test with surnamed, compound, 2-char, spaced and romanized names', () => {
+    const { cls, result } = analysisFixture();
+    ['김가온', '남궁민수', '이준', '김 솔', 'Daniel', '이나래'].forEach((n, i) => {
+      cls.students[i].name = n;
+    });
+    const text =
+      '김가온 가온이가 남궁민수 민수야 이준 준이가 김솔 솔아 daniel Daniel 이나래 나래야 김 가온';
+    for (const r of Object.values(result.responses)) {
+      r.hardReason = text;
+      r.toTeacher = text;
+    }
+    const m = analyzeSurvey(result, cls);
+    for (const me of cls.students) {
+      const json = JSON.stringify(buildParentCard(result, me.id, cls, m[me.id], ALL));
+      const others = cls.students.filter((s) => s.id !== me.id);
+      expect(containsStudentName(json, others), `${me.id} leaks: ${json}`).toBe(false);
+      for (const o of others) expect(json).not.toContain(o.id);
+    }
+  });
+});

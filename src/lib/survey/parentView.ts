@@ -6,39 +6,58 @@ import type { ParentInclude, Score, SurveyResult } from './types';
 
 const MASK = '○○';
 
-/** Names to hide: full name, plus the given name (surname dropped) when the name has 3+ chars. */
-function nameTokens(students: Student[]): string[] {
-  const set = new Set<string>();
-  for (const s of students) {
-    const name = s.name.trim();
-    if (!name) continue;
-    set.add(name);
-    if (name.length >= 3) set.add(name.slice(1));
-  }
-  // Longest first so "김가온" wins over "가온". Trailing particles are left untouched
-  // because only the name itself is replaced.
-  return [...set].sort((a, b) => b.length - a.length);
-}
-
+const squash = (s: string) => s.normalize('NFC').replace(/\s+/g, '');
 const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function tokenSource(students: Student[]): string | null {
-  const tokens = nameTokens(students);
-  return tokens.length === 0 ? null : tokens.map(escapeRe).join('|');
+/**
+ * Name patterns to hide. Roster names are NFC-normalized with all whitespace removed:
+ * the full name, the name minus 1 leading char (len >= 3, drops a surname), minus 2 leading
+ * chars (len >= 4, drops a compound surname). For 2-char names the second char alone is
+ * masked when directly followed by 이/아/야 (a vocative/subject form like "준이가").
+ * Matching tolerates whitespace between characters and ignores case.
+ */
+function patterns(students: Student[]): string[] {
+  const out = new Map<string, { len: number; src: string }>();
+  const add = (key: string, len: number, src: string) => {
+    if (!out.has(key)) out.set(key, { len, src });
+  };
+  const spaced = (t: string) => [...t].map(escapeRe).join('\\s*');
+  for (const s of students) {
+    const name = squash(s.name);
+    const chars = [...name];
+    if (chars.length === 0) continue;
+    const variants = [name];
+    if (chars.length >= 3) variants.push(chars.slice(1).join(''));
+    if (chars.length >= 4) variants.push(chars.slice(2).join(''));
+    for (const v of variants) add(v.toLowerCase(), [...v].length, spaced(v));
+    if (chars.length === 2) {
+      add(`${chars[1].toLowerCase()}+`, 1, `${escapeRe(chars[1])}(?=[이아야])`);
+    }
+  }
+  // Longest first so the full name wins over its fragments.
+  return [...out.values()].sort((a, b) => b.len - a.len).map((p) => p.src);
+}
+
+function matcher(students: Student[]): RegExp | null {
+  const ps = patterns(students);
+  return ps.length === 0 ? null : new RegExp(ps.join('|'), 'giu');
 }
 
 /**
- * Replaces every roster name (including the viewed student's own) with "○○".
- * Safety over precision: an ambiguous given-name match inside another word is masked too.
+ * Replaces every roster name (including the viewed student's own) with "○○", keeping any
+ * trailing particle. Safety over precision: ambiguous given-name matches are masked too.
  */
 export function maskNames(text: string, students: Student[]): string {
-  const src = tokenSource(students);
-  return src ? text.replace(new RegExp(src, 'g'), MASK) : text;
+  const re = matcher(students);
+  const t = text.normalize('NFC');
+  return re ? t.replace(re, MASK) : t;
 }
 
 export function containsStudentName(text: string, students: Student[]): boolean {
-  const src = tokenSource(students);
-  return src ? new RegExp(src).test(text) : false;
+  const re = matcher(students);
+  if (!re) return false;
+  re.lastIndex = 0;
+  return re.test(text.normalize('NFC'));
 }
 
 export interface ParentCard {
