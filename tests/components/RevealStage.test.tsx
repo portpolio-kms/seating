@@ -88,3 +88,38 @@ describe('RevealStage', () => {
     expect(getByTestId('seat-u0-1-s1')).toHaveTextContent('라희');
   });
 });
+
+describe('fix round 1', () => {
+  it('equal-content new stage object mid-reveal does not restart; onDone once', () => {
+    const onDone = vi.fn();
+    const clone = () => JSON.parse(JSON.stringify(stage)) as StageView;
+    const { result, rerender } = renderHook(({ st }) => useReveal({ stage: st, style: 'B', speed: 3, onDone }), {
+      initialProps: { st: clone() },
+    });
+    act(() => { vi.advanceTimersByTime(720); });
+    expect(result.current.shown['u0-0-s0']).toBe('가온');
+    expect(result.current.shown['u0-0-s1']).toBe('나래');
+    rerender({ st: clone() });
+    expect(result.current.shown['u0-0-s0']).toBe('가온');
+    act(() => { vi.advanceTimersByTime(800); });
+    expect(result.current.shown).toEqual(finals);
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('B: rolling shows the target name on the landing tick', () => {
+    const { result } = renderHook(() => useReveal({ stage, style: 'B', speed: 3, onDone: () => {} }));
+    act(() => { vi.advanceTimersByTime(350); });
+    expect(result.current.shown['u0-0-s0']).toBe('가온');
+    expect(result.current.rolling).toBe('가온');
+  });
+
+  it('C hidden seats look like cards; B pending seats show a placeholder', () => {
+    const c = render(<RevealStage stage={stage} style="C" speed={2} onDone={() => {}} />);
+    expect(c.getByTestId('seat-u0-0-s0').className).toContain('bg-indigo-500');
+    c.unmount();
+    const b = render(<RevealStage stage={stage} style="B" speed={2} onDone={() => {}} />);
+    expect(b.getByTestId('seat-u0-0-s0')).toHaveTextContent('·');
+    expect(b.getByTestId('seat-u0-0-s0').className).toContain('border-dashed');
+  });
+});

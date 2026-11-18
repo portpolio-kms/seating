@@ -12,6 +12,8 @@ export interface SeatingChartProps {
   highlightSeats?: SeatId[];
   /** Seats shown as switched off (used by the layout editor, where disabled seats are still rendered). */
   disabledSeats?: SeatId[];
+  /** Per-seat reveal state: 'hidden' = face-down card, 'pending' = not yet seated. */
+  seatState?: Record<SeatId, 'hidden' | 'pending'>;
 }
 
 const sizeClass = {
@@ -28,6 +30,7 @@ export function SeatingChart({
   selectedSeat,
   highlightSeats = [],
   disabledSeats = [],
+  seatState,
 }: SeatingChartProps) {
   const teacher = orientation === 'teacher';
   const s = sizeClass[size];
@@ -60,7 +63,11 @@ export function SeatingChart({
           const isDisabled = disabled.has(seat.seatId);
           const color = print
             ? 'border border-black bg-white text-black'
-            : isDisabled
+            : seatState?.[seat.seatId] === 'hidden'
+              ? 'border-2 border-indigo-300 bg-indigo-500 text-white shadow-md'
+              : seatState?.[seat.seatId] === 'pending'
+                ? 'border border-dashed border-slate-300 bg-slate-50 text-slate-400'
+                : isDisabled
               ? 'border border-dashed border-slate-400 bg-slate-100 text-slate-400 line-through'
               : selectedSeat === seat.seatId
                 ? 'bg-blue-600 text-white'
@@ -74,13 +81,14 @@ export function SeatingChart({
               key={seat.seatId}
               type="button"
               data-testid={`seat-${seat.seatId}`}
+              data-seat-id={seat.seatId}
               className={cls}
               onClick={() => onSeatClick(seat.seatId)}
             >
               {label}
             </button>
           ) : (
-            <div key={seat.seatId} data-testid={`seat-${seat.seatId}`} className={cls}>
+            <div key={seat.seatId} data-testid={`seat-${seat.seatId}`} data-seat-id={seat.seatId} className={cls}>
               {label}
             </div>
           );

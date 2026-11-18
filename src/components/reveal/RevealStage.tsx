@@ -22,7 +22,6 @@ export interface RevealStageProps {
 }
 
 const SHUFFLE_TICK_MS = 90;
-const SEAT_PREFIX = 'seat-';
 
 export function RevealStage({ stage, style, speed, onDone, size = 'small', onFlip, controlRef }: RevealStageProps) {
   const { shown, rolling, skipAll, flip, done } = useReveal({ stage, style, speed, onDone });
@@ -50,18 +49,25 @@ export function RevealStage({ stage, style, speed, onDone, size = 'small', onFli
         if (v !== undefined) return { seatId: s.seatId, name: v };
         if (style === 'A') return { seatId: s.seatId, name: names[Math.floor(Math.random() * names.length)] ?? '' };
         if (style === 'C') return { seatId: s.seatId, name: '?' };
-        return { seatId: s.seatId, name: '' };
+        return { seatId: s.seatId, name: '·' };
       }),
     })),
     // tick is intentionally a dependency: it re-rolls the shuffled names for style A.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [stage, shown, style, names, tick]);
 
+  const seatState = useMemo(() => {
+    const out: Record<SeatId, 'hidden' | 'pending'> = {};
+    if (style === 'A') return out;
+    for (const [id, v] of Object.entries(shown)) if (v === undefined) out[id] = style === 'C' ? 'hidden' : 'pending';
+    return out;
+  }, [shown, style]);
+
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (style !== 'C') return;
-    const el = (e.target as HTMLElement).closest<HTMLElement>(`[data-testid^="${SEAT_PREFIX}"]`);
-    if (!el) return;
-    const seatId = el.dataset.testid!.slice(SEAT_PREFIX.length);
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-seat-id]');
+    const seatId = el?.dataset.seatId;
+    if (!seatId) return;
     if (shown[seatId] !== undefined) return; // empty seat or already flipped
     flip(seatId);
     onFlip?.(seatId);
@@ -75,7 +81,7 @@ export function RevealStage({ stage, style, speed, onDone, size = 'small', onFli
           {rolling}
         </div>
       )}
-      <SeatingChart stage={view} size={chartSize} />
+      <SeatingChart stage={view} size={chartSize} seatState={seatState} />
     </div>
   );
 }

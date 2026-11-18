@@ -28,7 +28,7 @@ export interface UseRevealResult {
 
 export function useReveal({ stage, style, speed, onDone }: UseRevealOpts): UseRevealResult {
   // Named seats in row-major unit order, seats in order within a unit.
-  const { order, names, nameOf } = useMemo(() => {
+  const derived = (() => {
     const ord: SeatId[] = [];
     const nm: string[] = [];
     const map = new Map<SeatId, string | null>();
@@ -40,7 +40,11 @@ export function useReveal({ stage, style, speed, onDone }: UseRevealOpts): UseRe
       }
     }
     return { order: ord, names: nm, nameOf: map };
-  }, [stage]);
+  })();
+  // Content signature: a new-but-equal stage object must not restart the reveal.
+  const sig = JSON.stringify([style, [...derived.nameOf]]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { order, names, nameOf } = useMemo(() => derived, [sig]);
 
   const [revealed, setRevealed] = useState<ReadonlySet<SeatId>>(() => new Set());
   const [rolling, setRolling] = useState<string | null>(null);
@@ -77,9 +81,10 @@ export function useReveal({ stage, style, speed, onDone }: UseRevealOpts): UseRe
       const step = () => {
         timers.push(setTimeout(() => {
           add(order[i]);
+          const landed = names[i];
           i += 1;
           if (i >= order.length) stop();
-          else step();
+          else { setRolling(landed); step(); }
         }, B_STEP_MS[speedRef.current]));
       };
       step();
