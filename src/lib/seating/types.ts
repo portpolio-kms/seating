@@ -5,3 +5,6 @@ export type SeatId = string; // 'u{row}-{col}-s{index}'
 export interface Layout { mode: LayoutMode; rows: number; cols: number; groupSize: 4 | 6; disabledSeats: SeatId[] }
 export interface Unit { id: string; row: number; col: number; seats: SeatId[] }
 export type Assignment = Record<SeatId, string | null>; // seatId -> studentId
+export type ConstraintKind = 'avoid-pair' | 'avoid-group' | 'must-pair' | 'must-group';
+export interface PairConstraint { id: string; a: string; b: string; kind: ConstraintKind } // a,b = studentId
+export interface EffectiveConstraints { together: [string, string][]; apart: [string, string][] }
