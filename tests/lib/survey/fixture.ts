@@ -1,5 +1,6 @@
 import type { ClassRecord } from '@/lib/db/repo';
 import { Q, studentLabel } from '@/lib/survey/questions';
+import type { Score, SurveyResponse, SurveyResult } from '@/lib/survey/types';
 
 const NAMES = ['가온', '나래', '다온', '라희', '마루', '바다'];
 
@@ -74,4 +75,51 @@ export function buildCsv(
   const lines = [cols.map((c) => cell(c.header)).join(',')];
   rows.forEach((r, i) => lines.push(cols.map((c) => cell(c.get(r, i))).join(',')));
   return lines.join('\r\n');
+}
+
+// ---- Analysis fixture (hand-checkable) ------------------------------------
+// Roster s1..s6 (가온 나래 다온 라희 마루 바다); s6 did not respond; "sx" is a
+// deleted student who responded (rated s1 = 1, nominated s1 as hard).
+function resp(
+  studentId: string,
+  p: Partial<SurveyResponse> & { ratings: Record<string, Score> },
+): SurveyResponse {
+  return {
+    studentId,
+    submittedAt: '2026-11-18T10:00:00.000Z',
+    best: [],
+    wantCloser: [],
+    playWith: [],
+    helpFrom: [],
+    hard: [],
+    hardReason: '',
+    toTeacher: '',
+    alone: null,
+    happy: null,
+    schoolFun: null,
+    family: null,
+    ...p,
+  };
+}
+
+export function analysisFixture(): { cls: ClassRecord; result: SurveyResult } {
+  const cls = fakeClass(6);
+  const result: SurveyResult = {
+    id: 'r1',
+    classId: cls.id,
+    name: '테스트 설문',
+    importedAt: '2026-11-18T10:00:00.000Z',
+    labels: {},
+    dismissed: [],
+    parentInclude: {},
+    responses: {
+      s1: resp('s1', { ratings: { s2: 5, s3: 4, s4: 2, s5: 3, s6: 1 }, hard: ['s4'], alone: 2, happy: 4, schoolFun: 4 }),
+      s2: resp('s2', { ratings: { s1: 5, s3: 2, s4: 3, s5: 2, s6: 2 }, hard: ['s4'], alone: 4, happy: 2, schoolFun: 3 }),
+      s3: resp('s3', { ratings: { s1: 2, s2: 2, s4: 3, s5: 4, s6: 3 }, alone: 3, happy: 3, schoolFun: 2 }),
+      s4: resp('s4', { ratings: { s1: 2, s2: 3, s3: 3, s5: 3, s6: 3 }, hard: ['s1'], alone: 5, happy: 3, schoolFun: 3 }),
+      s5: resp('s5', { ratings: { s1: 3, s2: 2, s3: 4, s4: 3, s6: 3 }, alone: 1, happy: 4, schoolFun: 4 }),
+      sx: resp('sx', { ratings: { s1: 1 }, hard: ['s1'] }),
+    },
+  };
+  return { cls, result };
 }
