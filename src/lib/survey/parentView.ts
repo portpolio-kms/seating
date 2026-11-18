@@ -87,7 +87,7 @@ export function buildParentCard(
     mutualCount: m.mutual.length,
     playWithCount: resp?.playWith.length ?? 0,
     helpFromCount: resp?.helpFrom.length ?? 0,
-    hardCount: include.hardCount ? (resp?.hard.length ?? 0) : null,
+    hardCount: include.hardCount ? m.nominatedBy.length : null,
     scores: resp
       ? { alone: resp.alone, happy: resp.happy, schoolFun: resp.schoolFun, family: resp.family }
       : null,
