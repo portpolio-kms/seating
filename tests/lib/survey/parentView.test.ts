@@ -56,6 +56,13 @@ describe('buildParentCard', () => {
     expect(c.receivedAvg).toBe(m.s1.receivedAvg);
     expect(c.scores).toEqual({ alone: 2, happy: 4, schoolFun: 4, family: null });
   });
+  it('hardCount is the number of roster students who nominated this student', () => {
+    const { cls, result } = analysisFixture();
+    const m = analyzeSurvey(result, cls);
+    expect(m.s4.nominatedBy.length).toBe(2);
+    expect(buildParentCard(result, 's4', cls, m.s4, ALL).hardCount).toBe(2);
+    expect(buildParentCard(result, 's4', cls, m.s4, NONE).hardCount).toBeNull();
+  });
   it('non-respondent -> scores null, zero counts', () => {
     const { cls, result } = analysisFixture();
     const m = analyzeSurvey(result, cls);
