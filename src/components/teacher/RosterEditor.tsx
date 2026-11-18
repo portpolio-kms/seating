@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
-import { removeStudent } from '@/lib/db/repo';
+import { DraftInput } from './DraftInput';
 import { parseRosterText } from '@/lib/roster';
 import type { Gender, Student } from '@/lib/seating/types';
 
@@ -17,7 +17,7 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
   const edit = (id: string, patch: Partial<Student>) =>
     setStudents(cls.students.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
-  const names = cls.students.map((s) => s.name);
+  const names = cls.students.map((s) => s.name).filter((n) => n !== '');
   const hasDup = new Set(names).size !== names.length;
 
   const addRow = () => {
@@ -25,15 +25,19 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
     setStudents([...cls.students, { id: crypto.randomUUID(), number: next, name: '', gender: null }]);
   };
 
-  const remove = async (s: Student) => {
+  const remove = (s: Student) => {
     if (!window.confirm(`${s.name || `${s.number}번`} 학생을 삭제할까요?`)) return;
-    onChange(await removeStudent(cls.id, s.id));
+    onChange({
+      ...cls,
+      students: cls.students.filter((x) => x.id !== s.id),
+      constraints: cls.constraints.filter((c) => c.a !== s.id && c.b !== s.id),
+    });
   };
 
   const addPasted = () => {
     const { rows, errors: errs } = parseRosterText(text);
     setErrors(errs);
-    if (rows.length === 0) return;
+    if (errs.length > 0 || rows.length === 0) return;
     const used = new Set(cls.students.map((s) => s.number));
     const added: Student[] = rows.map((r) => {
       let n = r.number;
@@ -42,10 +46,8 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
       return { id: crypto.randomUUID(), number: n, name: r.name, gender: r.gender };
     });
     setStudents([...cls.students, ...added]);
-    if (errs.length === 0) {
-      setText('');
-      setPasting(false);
-    }
+    setText('');
+    setPasting(false);
   };
 
   return (
@@ -68,21 +70,24 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
           {cls.students.map((s) => (
             <tr key={s.id}>
               <td>
-                <input
+                <DraftInput
                   aria-label={`${s.number}번 번호`}
                   type="number"
                   min={1}
                   className={`${field} w-16`}
-                  value={s.number}
-                  onChange={(e) => edit(s.id, { number: Math.max(1, Math.round(Number(e.target.value)) || 1) })}
+                  value={String(s.number)}
+                  onCommit={(raw) => {
+                    const n = Math.round(Number(raw));
+                    if (raw.trim() !== '' && n >= 1) edit(s.id, { number: n });
+                  }}
                 />
               </td>
               <td>
-                <input
+                <DraftInput
                   aria-label={`${s.number}번 이름`}
                   className={`${field} w-full`}
                   value={s.name}
-                  onChange={(e) => edit(s.id, { name: e.target.value.trim() })}
+                  onCommit={(raw) => edit(s.id, { name: raw.trim() })}
                 />
               </td>
               <td>
@@ -98,7 +103,7 @@ export function RosterEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
                 </select>
               </td>
               <td>
-                <button type="button" className="text-red-600 underline" onClick={() => void remove(s)}>
+                <button type="button" className="text-red-600 underline" onClick={() => remove(s)}>
                   삭제
                 </button>
               </td>

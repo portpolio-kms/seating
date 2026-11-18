@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { SeatingChart } from '@/components/SeatingChart';
 import type { StageView } from '@/lib/channel';
 import type { ClassRecord } from '@/lib/db/repo';
 import { buildUnits, validateLayout } from '@/lib/seating/layout';
 import type { Layout, SeatId } from '@/lib/seating/types';
+import { DraftInput } from './DraftInput';
 
 const field = 'rounded border border-slate-300 px-2 py-1';
 
@@ -15,9 +17,17 @@ function pruned(layout: Layout): Layout {
 }
 
 export function LayoutEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c: ClassRecord) => void }) {
-  const layout = cls.layout;
-  const update = (patch: Partial<Layout>) => onChange({ ...cls, layout: pruned({ ...layout, ...patch }) });
-  const clamp = (v: string) => Math.min(10, Math.max(1, Math.round(Number(v)) || 1));
+  // Edits go to a local draft; onChange fires only when 저장 is clicked on a valid draft.
+  const [layout, setLayout] = useState<Layout>(cls.layout);
+  const [saved, setSaved] = useState(false);
+  const update = (patch: Partial<Layout>) => {
+    setLayout((l) => pruned({ ...l, ...patch }));
+    setSaved(false);
+  };
+  const commitDim = (key: 'rows' | 'cols', raw: string) => {
+    const n = Math.round(Number(raw));
+    if (raw.trim() !== '' && Number.isFinite(n)) update({ [key]: Math.min(10, Math.max(1, n)) });
+  };
 
   const stage: StageView = {
     className: cls.name,
@@ -56,26 +66,26 @@ export function LayoutEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
         </label>
         <label className="flex items-center gap-2">
           줄
-          <input
+          <DraftInput
             aria-label="줄"
             type="number"
             min={1}
             max={10}
             className={`${field} w-16`}
-            value={layout.rows}
-            onChange={(e) => update({ rows: clamp(e.target.value) })}
+            value={String(layout.rows)}
+            onCommit={(raw) => commitDim('rows', raw)}
           />
         </label>
         <label className="flex items-center gap-2">
           분단
-          <input
+          <DraftInput
             aria-label="분단"
             type="number"
             min={1}
             max={10}
             className={`${field} w-16`}
-            value={layout.cols}
-            onChange={(e) => update({ cols: clamp(e.target.value) })}
+            value={String(layout.cols)}
+            onCommit={(raw) => commitDim('cols', raw)}
           />
         </label>
         {layout.mode === 'group' && (
@@ -107,11 +117,15 @@ export function LayoutEditor({ cls, onChange }: { cls: ClassRecord; onChange: (c
         <button
           type="button"
           className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
-          onClick={() => onChange({ ...cls, layout: pruned(layout) })}
+          onClick={() => {
+            onChange({ ...cls, layout: pruned(layout) });
+            setSaved(true);
+          }}
         >
           저장
         </button>
       )}
+      {saved && problems.length === 0 && <span className="ml-3 text-sm text-green-700">저장됨</span>}
     </div>
   );
 }
