@@ -74,6 +74,7 @@ export function GraphView({
 }) {
   const [filter, setFilter] = useState<EdgeFilter>('mutual');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const appliedFilter = useRef<EdgeFilter>('mutual');
@@ -107,7 +108,14 @@ export function GraphView({
     let disposed = false;
     let created: Network | null = null;
     (async () => {
-      const vis = await import('vis-network/standalone');
+      let vis: typeof import('vis-network/standalone');
+      try {
+        vis = await import('vis-network/standalone');
+      } catch {
+        // e.g. the chunk is gone after a new deployment.
+        if (!disposed) setLoadError(true);
+        return;
+      }
       if (disposed || !containerRef.current) return;
       created = new vis.Network(containerRef.current, toVisData(graphFor(filterRef.current)), {
         nodes: { shape: 'dot' },
@@ -117,6 +125,9 @@ export function GraphView({
       });
       networkRef.current = created;
       appliedFilter.current = filterRef.current;
+      // A new network shows the full view: drop a selection made on the previous one.
+      setSelectedId(null);
+      setLoadError(false);
       created.on('click', (params: { nodes?: (string | number)[] }) => {
         const id = params.nodes?.[0];
         if (id != null) onNodeClick.current(String(id));
@@ -170,6 +181,11 @@ export function GraphView({
         </label>
         <p className="text-xs text-slate-600">{LEGEND}</p>
       </div>
+      {loadError && (
+        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-red-800">
+          그래프를 불러오지 못했어요. 페이지를 새로 고쳐 주세요
+        </p>
+      )}
       <div className="flex flex-col gap-3 md:flex-row">
         <div
           ref={containerRef}

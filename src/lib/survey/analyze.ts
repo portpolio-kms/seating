@@ -218,7 +218,8 @@ export function egoZones(
     const hard = c.nominated.includes(o) || c.nominatedBy.includes(o);
     if (hard || (mine != null && theirs != null && mine <= 2 && theirs <= 2)) zones.top.push(o);
     else if (c.mutual.includes(o)) zones.right.push(o);
-    else if ((mine ?? 0) >= 4 || (theirs ?? 0) >= 4) zones.bottom.push(o);
+    // One-sided as in spec 5.4: 4+ against 2- in either direction (4 vs 3 or unanswered is "left").
+    else if (c.likesOneSided.includes(o) || c.likedByOneSided.includes(o)) zones.bottom.push(o);
     else zones.left.push(o);
   }
   return zones;

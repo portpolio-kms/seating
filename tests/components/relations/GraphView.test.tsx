@@ -82,6 +82,16 @@ describe('GraphView', () => {
     expect(screen.queryByRole('button', { name: '상담 카드 열기' })).toBeNull();
   });
 
+  it('drops the selected student when the network is recreated for another survey', async () => {
+    const { cls, result } = analysisFixture();
+    const view = await mounted(<GraphView cls={cls} survey={result} openCard={vi.fn()} />);
+    act(() => h.handlers.click({ nodes: ['s1'] }));
+    expect(screen.getByRole('button', { name: '상담 카드 열기' })).toBeInTheDocument();
+    view.rerender(<GraphView cls={cls} survey={{ ...result, id: 'r2' }} openCard={vi.fn()} />);
+    await waitFor(() => expect(h.ctorData.length).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '상담 카드 열기' })).toBeNull());
+  });
+
   it('draws no edges for a survey without responses', async () => {
     const { cls, result } = analysisFixture();
     await mounted(<GraphView cls={cls} survey={{ ...result, responses: {} }} openCard={vi.fn()} />);

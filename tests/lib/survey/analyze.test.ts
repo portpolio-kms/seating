@@ -147,4 +147,20 @@ describe('egoZones', () => {
       left: ['s4', 's6'],
     });
   });
+  it('puts 4-vs-3 and 4-vs-unanswered pairs on the left, not bottom', () => {
+    const { cls, result } = setup();
+    // s1 -> s5 is 3, s5 -> s1 becomes 4: not one-sided (needs 2 or less on the other side).
+    result.responses.s5.ratings.s1 = 4;
+    // s1 -> s6 becomes 5; s6 did not respond.
+    result.responses.s1.ratings.s6 = 5;
+    const m = analyzeSurvey(result, cls);
+    const z = egoZones('s1', result, cls, m);
+    expect(z.bottom).toEqual(['s3']);
+    expect(z.left).toEqual(['s5', 's6']);
+  });
+  it('one-sided in the other direction (they like, I gave 2 or less) is bottom', () => {
+    const { cls, result, m } = setup();
+    // s1 gave s3 4, s3 gave s1 2: from s3's view s1 likes s3 one-sidedly.
+    expect(egoZones('s3', result, cls, m).bottom).toEqual(['s1']);
+  });
 });
