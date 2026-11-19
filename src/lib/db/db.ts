@@ -17,10 +17,26 @@ export type SeatingDatabase = IDBPDatabase<SeatingDB>;
 
 let dbPromise: Promise<SeatingDatabase> | null = null;
 
-const blockedListeners = new Set<() => void>();
+let dbBlocked = false;
+const blockedListeners = new Set<(blocked: boolean) => void>();
 
-/** Calls cb when a database upgrade is blocked by another open window or tab of an older version. */
-export function onDbBlocked(cb: () => void): () => void {
+function setDbBlocked(blocked: boolean) {
+  if (dbBlocked === blocked) return;
+  dbBlocked = blocked;
+  blockedListeners.forEach((cb) => cb(blocked));
+}
+
+/** True while a database upgrade waits on another open window or tab of an older version. */
+export function isDbBlocked(): boolean {
+  return dbBlocked;
+}
+
+/**
+ * Calls cb(true) when a database upgrade gets blocked by another window or tab of an older
+ * version, and cb(false) once the open finishes. Read isDbBlocked() first: the block may
+ * have started before the subscription.
+ */
+export function onDbBlockedChange(cb: (blocked: boolean) => void): () => void {
   blockedListeners.add(cb);
   return () => {
     blockedListeners.delete(cb);
@@ -29,7 +45,7 @@ export function onDbBlocked(cb: () => void): () => void {
 
 export function getDb(): Promise<SeatingDatabase> {
   if (!dbPromise) {
-    dbPromise = openDB<SeatingDB>(DB_NAME, DB_VERSION, {
+    const opening = openDB<SeatingDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
         // Never recreate stores that exist: version-1 databases keep their data.
         if (oldVersion < 1) {
@@ -44,7 +60,7 @@ export function getDb(): Promise<SeatingDatabase> {
         }
       },
       blocked() {
-        blockedListeners.forEach((cb) => cb());
+        setDbBlocked(true);
       },
       blocking() {
         // A newer version wants to upgrade: step aside so it never waits on us.
@@ -56,6 +72,9 @@ export function getDb(): Promise<SeatingDatabase> {
         dbPromise = null;
       },
     });
+    const clear = () => setDbBlocked(false);
+    opening.then(clear, clear);
+    dbPromise = opening;
   }
   return dbPromise;
 }

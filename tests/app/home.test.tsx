@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { openOldVersionConnection } from '../lib/db/oldVersion';
 import { hashPin } from '@/lib/auth/pin';
 import { deleteClass, listSeatingRecords, saveClass, saveSettings, wipeAll, type ClassRecord } from '@/lib/db/repo';
 import Home from '@/app/page';
@@ -23,6 +24,19 @@ const forbidden = () => {
 
 beforeEach(async () => {
   await wipeAll();
+});
+
+describe('classroom home while the database upgrade is blocked', () => {
+  it('shows the close-other-windows message instead of a blank page, then loads', async () => {
+    const old = await openOldVersionConnection();
+    render(<Home />);
+    const msg = '이 앱이 열린 다른 창이나 탭을 모두 닫아 주세요. 새 버전으로 바뀌는 중이에요.';
+    expect(await screen.findByText(msg)).toBeInTheDocument();
+
+    old.close();
+    expect(await screen.findByText('교사 화면에서 학급을 먼저 만들어 주세요')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(msg)).toBeNull());
+  });
 });
 
 describe('classroom home', () => {

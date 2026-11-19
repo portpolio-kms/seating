@@ -1,6 +1,6 @@
 import { openDB } from 'idb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { __resetDbForTests, DB_NAME, onDbBlocked } from '@/lib/db/db';
+import { __resetDbForTests, DB_NAME, isDbBlocked, onDbBlockedChange } from '@/lib/db/db';
 import { deleteClass, getClass, listClasses, saveClass, wipeAll } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import { exportBackup, importBackup, parseBackup } from '@/lib/db/backup';
@@ -200,12 +200,16 @@ describe('db upgrade blocked by an old window', () => {
     });
     await old.put('classes', makeClass('legacy'));
 
-    let blocked = 0;
-    const off = onDbBlocked(() => blocked++);
+    const changes: boolean[] = [];
+    const off = onDbBlockedChange((b) => changes.push(b));
+    expect(isDbBlocked()).toBe(false);
     const pending = getClass('legacy');
-    await vi.waitFor(() => expect(blocked).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(changes).toEqual([true]));
+    expect(isDbBlocked()).toBe(true);
     old.close();
     expect((await pending)?.id).toBe('legacy');
+    expect(changes).toEqual([true, false]);
+    expect(isDbBlocked()).toBe(false);
     off();
     await __resetDbForTests();
   });

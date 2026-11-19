@@ -13,7 +13,7 @@ import { LayoutEditor } from '@/components/teacher/LayoutEditor';
 import { RosterEditor } from '@/components/teacher/RosterEditor';
 import { useIdleLock } from '@/hooks/useIdleLock';
 import { openTeacherChannel, type ToPresenter, type ToTeacher } from '@/lib/channel';
-import { onDbBlocked } from '@/lib/db/db';
+import { DB_BLOCKED_MESSAGE, useDbBlocked } from '@/hooks/useDbBlocked';
 import { deleteClass, getSettings, listClasses, saveClass, saveSettings, type ClassRecord } from '@/lib/db/repo';
 
 const TABS = [
@@ -115,9 +115,7 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
   const [creating, setCreating] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [saveError, setSaveError] = useState(false);
-  const [dbBlocked, setDbBlocked] = useState(false);
-
-  useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
+  const dbBlocked = useDbBlocked();
 
   // Two-screen mode: the teacher window must stay usable during a reveal, so it does not lock then.
   useIdleLock({ minutes: data?.idleMinutes ?? 5, enabled: unlocked && !revealing, onLock: () => setUnlocked(false) });
@@ -185,6 +183,12 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
 
   return (
     <>
+      {/* Outside the PIN gate and the loaded data: while blocked the database never opens. */}
+      {dbBlocked && (
+        <p role="alert" className="m-3 rounded bg-amber-50 px-3 py-2 text-amber-900">
+          {DB_BLOCKED_MESSAGE}
+        </p>
+      )}
       {!unlocked && (
         <PinGate
           warnOnScreen={warnOnScreen}
@@ -232,12 +236,6 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
               잠그기
             </button>
           </header>
-
-          {dbBlocked && (
-            <p role="alert" className="mx-6 mt-3 rounded bg-amber-50 px-3 py-2 text-amber-900">
-              이 앱이 열린 다른 창이나 탭을 모두 닫아 주세요. 새 버전으로 바뀌는 중이에요.
-            </p>
-          )}
 
           {saveError && (
             <p role="alert" className="mx-6 mt-3 rounded bg-red-50 px-3 py-2 text-red-800">

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PinGate } from '@/components/PinGate';
 import { RevealStage } from '@/components/reveal/RevealStage';
 import { SeatingChart } from '@/components/SeatingChart';
+import { DB_BLOCKED_MESSAGE, useDbBlocked } from '@/hooks/useDbBlocked';
 import { recordToStageView, toStageView } from '@/lib/channel';
 import {
   addSeatingRecord,
@@ -46,6 +47,7 @@ export default function Home() {
   const [saveError, setSaveError] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const alive = useRef(true);
+  const dbBlocked = useDbBlocked();
 
   const reload = useCallback(async () => {
     try {
@@ -74,7 +76,17 @@ export default function Home() {
     return toStageView(cls, view.assignment);
   }, [cls, view]);
 
-  if (cls === undefined) return null;
+  if (cls === undefined) {
+    // While another window blocks the database upgrade, loading never finishes: say why.
+    if (!dbBlocked) return null;
+    return (
+      <main className="flex min-h-screen items-center justify-center p-8 text-center">
+        <p role="alert" className="text-3xl font-bold text-amber-900">
+          {DB_BLOCKED_MESSAGE}
+        </p>
+      </main>
+    );
+  }
 
   if (cls === null) {
     return (

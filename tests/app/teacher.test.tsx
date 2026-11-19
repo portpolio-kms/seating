@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ToTeacher } from '@/lib/channel';
 import {
   addSeatingRecord,
@@ -19,18 +19,8 @@ vi.mock('@/lib/channel', async (orig) => ({
   openTeacherChannel: (_cb: (m: ToTeacher) => void) => ({ send: vi.fn(), close }),
 }));
 
-let dbBlockedListener: (() => void) | null = null;
-vi.mock('@/lib/db/db', async (orig) => ({
-  ...(await orig<typeof import('@/lib/db/db')>()),
-  onDbBlocked: (cb: () => void) => {
-    dbBlockedListener = cb;
-    return () => {
-      dbBlockedListener = null;
-    };
-  },
-}));
-
 import TeacherPage from '@/app/teacher/page';
+import { openOldVersionConnection } from '../lib/db/oldVersion';
 
 beforeEach(async () => {
   await wipeAll();
@@ -115,12 +105,20 @@ describe('/teacher relations tab', () => {
     expect(screen.getByRole('button', { name: '결과 올리기' })).toBeInTheDocument();
   });
 
-  it('shows a banner when the database upgrade is blocked by another tab', async () => {
-    await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
+});
+
+describe('/teacher blocked database upgrade', () => {
+  it('shows the banner before any PIN interaction and clears it once the old window closes', async () => {
+    const old = await openOldVersionConnection();
+    render(<TeacherPage />);
     const msg = '이 앱이 열린 다른 창이나 탭을 모두 닫아 주세요. 새 버전으로 바뀌는 중이에요.';
-    expect(screen.queryByText(msg)).toBeNull();
-    act(() => dbBlockedListener?.());
-    expect(screen.getByText(msg)).toBeInTheDocument();
+    expect(await screen.findByText(msg)).toBeInTheDocument();
+    expect(screen.queryByLabelText('PIN')).toBeNull();
+
+    old.close();
+    await waitFor(() => expect(screen.queryByText(msg)).toBeNull());
+    // The upgrade completed: the PIN gate can now read settings.
+    expect(await screen.findByLabelText('PIN')).toBeInTheDocument();
   });
 });
 
