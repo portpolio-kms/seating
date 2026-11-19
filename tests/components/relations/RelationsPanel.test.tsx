@@ -6,6 +6,13 @@ import { RelationsPanel } from '@/components/relations/RelationsPanel';
 import type { SurveyResult } from '@/lib/survey/types';
 import { fakeClass } from '../../lib/survey/fixture';
 
+vi.mock('vis-network/standalone', () => ({
+  Network: class {
+    on() {}
+    destroy() {}
+  },
+}));
+
 beforeEach(async () => {
   await wipeAll();
 });
@@ -105,5 +112,17 @@ describe('RelationsPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: '지우기' }));
     await waitFor(() => expect(screen.getByText('먼저 결과를 올려 주세요')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: '관심 학생' })).toBeNull();
+  });
+
+  it('shows the graph button only with a survey and renders the graph view', async () => {
+    const { analysisFixture } = await import('../../lib/survey/fixture');
+    const { cls, result } = analysisFixture();
+    const first = render(<RelationsPanel cls={cls} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: '관계망' })).toBeNull();
+    first.unmount();
+    await saveSurvey(result);
+    render(<RelationsPanel cls={cls} onChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '관계망' }));
+    expect(screen.getByLabelText('선 필터')).toBeInTheDocument();
   });
 });

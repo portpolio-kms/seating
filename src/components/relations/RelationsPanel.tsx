@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import type { SurveyResult } from '@/lib/survey/types';
+import { GraphView } from './GraphView';
 import { RadarView } from './RadarView';
 import { SurveySetup } from './SurveySetup';
 import { SurveyUpload } from './SurveyUpload';
@@ -13,6 +14,7 @@ const VIEWS = [
   { id: 'setup', label: '설문 만들기' },
   { id: 'upload', label: '결과 올리기' },
   { id: 'radar', label: '관심 학생' },
+  { id: 'graph', label: '관계망' },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
 
@@ -83,7 +85,7 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
   };
 
   // Survey-dependent views fall back to the upload view when the survey is gone.
-  const shown: View = !survey && view === 'radar' ? 'upload' : view;
+  const shown: View = !survey && (view === 'radar' || view === 'graph') ? 'upload' : view;
 
   // Consumed by the card view added in a later task.
   void selectedStudentId;
@@ -91,7 +93,7 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {VIEWS.filter((v) => v.id !== 'radar' || survey).map((v) => (
+        {VIEWS.filter((v) => (v.id !== 'radar' && v.id !== 'graph') || survey).map((v) => (
           <button
             key={v.id}
             type="button"
@@ -135,6 +137,7 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
           openCard={openCard}
         />
       )}
+      {shown === 'graph' && survey && <GraphView cls={cls} survey={survey} openCard={openCard} />}
       {shown === 'upload' && (
         <div className="space-y-6">
           <SurveyUpload cls={cls} onSaved={addSurvey} />

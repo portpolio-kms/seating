@@ -13,7 +13,9 @@
     "idb": "8.0.4",
     "next": "16.4.6",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "vis-data": "8.0.6",
+    "vis-network": "10.1.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
