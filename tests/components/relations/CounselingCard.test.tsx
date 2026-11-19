@@ -147,6 +147,14 @@ describe('CounselingCard - parent include checkboxes', () => {
     expect(screen.getByText('학생 이름이 들어 있어요. 학부모 보기에서는 ○○로 가려져요')).toBeInTheDocument();
   });
 
+  it('warns when a checked free text contains only a deleted student name', () => {
+    const d = data({ ownHardReason: true });
+    d.result.labels = { sx: '7. 사랑' };
+    d.result.responses.s1.hardReason = '사랑이가 놀려요';
+    setup('s1', d.result);
+    expect(screen.getByText('학생 이름이 들어 있어요. 학부모 보기에서는 ○○로 가려져요')).toBeInTheDocument();
+  });
+
   it('does not warn when nothing is checked', () => {
     setup('s1');
     expect(screen.queryByText('학생 이름이 들어 있어요. 학부모 보기에서는 ○○로 가려져요')).toBeNull();
@@ -155,29 +163,49 @@ describe('CounselingCard - parent include checkboxes', () => {
 
 describe('CounselingCard - parent view', () => {
   const others = ['나래', '다온', '라희', '마루', '바다'];
+  /** Everything rendered (markup and attributes included) in the printable parent view. */
+  const printHtml = (container: HTMLElement) => container.querySelector('.print-area')?.innerHTML ?? '';
 
   it('contains no other roster name even with every item included', () => {
     const { view } = setup('s1', data({ ownHardReason: true, toTeacher: true, hardCount: true }).result);
     fireEvent.click(screen.getByRole('button', { name: '학부모 보기' }));
-    const text = view.container.textContent ?? '';
-    for (const n of others) expect(text).not.toContain(n);
-    expect(text).toContain('가온');
-    expect(text).toContain('○○가 자꾸 놀려요');
-    expect(text).toContain('○○와 ○○랑 더 놀고 싶어요');
+    const html = printHtml(view.container);
+    for (const n of others) expect(html).not.toContain(n);
+    expect(html).toContain('가온');
+    expect(html).toContain('○○가 자꾸 놀려요');
+    expect(html).toContain('○○와 ○○랑 더 놀고 싶어요');
     expect(within(section('학부모 보기')).getByText('지목받은 수')).toBeInTheDocument();
-    expect(text).not.toContain('내 물건을 가져가요');
+    expect(html).not.toContain('내 물건을 가져가요');
+  });
+
+  it('masks a deleted student and a survey name that contain student names', () => {
+    const d = data({ ownHardReason: true, toTeacher: true, hardCount: true });
+    // "사랑" (sx) was deleted from the roster after the survey; only the label snapshot knows the name.
+    d.result.labels = { s1: '1. 가온', s2: '2. 나래', sx: '7. 사랑' };
+    d.result.name = '나래 사랑 관계 설문';
+    d.result.responses.s1.hardReason = '사랑이가 자꾸 놀려요';
+    const { view } = setup('s1', d.result);
+    fireEvent.click(screen.getByRole('button', { name: '학부모 보기' }));
+    const html = printHtml(view.container);
+    expect(html).not.toContain('사랑');
+    expect(html).not.toContain('나래');
+    expect(html).toContain('○○ ○○ 관계 설문');
+    expect(html).toContain('○○이가 자꾸 놀려요');
   });
 
   it('contains no other roster name for any student', () => {
     const all = data({ ownHardReason: true, toTeacher: true, hardCount: true });
+    all.result.labels = { sx: '7. 사랑' };
+    all.result.name = '사랑 설문';
     for (const s of all.cls.students) {
       all.result.parentInclude[s.id] = { ownHardReason: true, toTeacher: true, hardCount: true };
     }
     for (const s of all.cls.students) {
       const { view } = setup(s.id, all.result);
       fireEvent.click(screen.getByRole('button', { name: '학부모 보기' }));
-      const text = view.container.textContent ?? '';
-      for (const o of all.cls.students) if (o.id !== s.id) expect(text).not.toContain(o.name);
+      const html = printHtml(view.container);
+      for (const o of all.cls.students) if (o.id !== s.id) expect(html).not.toContain(o.name);
+      expect(html).not.toContain('사랑');
       view.unmount();
     }
   });
@@ -185,10 +213,10 @@ describe('CounselingCard - parent view', () => {
   it('hides unchecked free text and the nomination count by default', () => {
     const { view } = setup('s1');
     fireEvent.click(screen.getByRole('button', { name: '학부모 보기' }));
-    const text = view.container.textContent ?? '';
-    expect(text).not.toContain('놀려요');
-    expect(text).not.toContain('놀고 싶어요');
-    expect(text).not.toContain('지목받은 수');
+    const html = printHtml(view.container);
+    expect(html).not.toContain('놀려요');
+    expect(html).not.toContain('놀고 싶어요');
+    expect(html).not.toContain('지목받은 수');
   });
 
   it('renders a non-respondent parent card without errors', () => {
@@ -202,12 +230,14 @@ describe('CounselingCard - print', () => {
   it('prints the currently shown view inside .print-area', () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => {});
     const { view } = setup('s1');
-    fireEvent.click(screen.getByRole('button', { name: '인쇄' }));
+    expect(screen.queryByRole('button', { name: '학부모용 인쇄' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '교사용 인쇄' }));
     expect(print).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector('.print-area')?.textContent).toContain('서로 친함');
 
     fireEvent.click(screen.getByRole('button', { name: '학부모 보기' }));
-    fireEvent.click(screen.getByRole('button', { name: '인쇄' }));
+    expect(screen.queryByRole('button', { name: '교사용 인쇄' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '학부모용 인쇄' }));
     expect(print).toHaveBeenCalledTimes(2);
     const area = view.container.querySelector('.print-area');
     expect(area?.textContent).not.toContain('서로 친함');

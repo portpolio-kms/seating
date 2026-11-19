@@ -1,27 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeSurvey } from '@/lib/survey/analyze';
-import { buildParentCard, containsStudentName, maskNames } from '@/lib/survey/parentView';
+import { buildParentCard, containsStudentName, maskNames, namesToMask } from '@/lib/survey/parentView';
 import type { ParentInclude } from '@/lib/survey/types';
 import { analysisFixture } from './fixture';
 
 const ALL: ParentInclude = { ownHardReason: true, toTeacher: true, hardCount: true };
 const NONE: ParentInclude = { ownHardReason: false, toTeacher: false, hardCount: false };
-const stu = (id: string, number: number, name: string) => ({ id, number, name, gender: null });
 
 describe('maskNames', () => {
-  const roster = [stu('a', 1, '김가온'), stu('b', 2, '이나래')];
+  const roster = ['김가온', '이나래'];
   it('masks full and given names, keeping particles', () => {
     expect(maskNames('김가온이랑 놀기 싫어요. 가온이가 장난쳐요. 나래야 미안', roster)).toBe(
       '○○이랑 놀기 싫어요. ○○이가 장난쳐요. ○○야 미안',
     );
   });
   it('masks 2-char names fully and leaves other text alone', () => {
-    expect(maskNames('가온이랑 놀았어요', [stu('a', 1, '가온')])).toBe('○○이랑 놀았어요');
+    expect(maskNames('가온이랑 놀았어요', ['가온'])).toBe('○○이랑 놀았어요');
     expect(maskNames('그냥 힘들어요', roster)).toBe('그냥 힘들어요');
   });
   it('containsStudentName detects names', () => {
     expect(containsStudentName('나래가 싫어', roster)).toBe(true);
     expect(containsStudentName('아무도 없음', roster)).toBe(false);
+  });
+});
+
+describe('namesToMask', () => {
+  it('is the current roster plus names from the survey label snapshot', () => {
+    const { cls, result } = analysisFixture();
+    result.labels = { s1: '1. 가온', sx: '7. 사랑', s2: '2.  이전이름' };
+    expect(namesToMask(cls, result).sort()).toEqual(
+      ['가온', '나래', '다온', '라희', '마루', '바다', '사랑', '이전이름'].sort(),
+    );
   });
 });
 
@@ -55,6 +64,23 @@ describe('buildParentCard', () => {
     expect(c.mutualCount).toBe(m.s1.mutual.length);
     expect(c.receivedAvg).toBe(m.s1.receivedAvg);
     expect(c.scores).toEqual({ alone: 2, happy: 4, schoolFun: 4, family: null });
+  });
+  it('masks names in the survey name', () => {
+    const { cls, result } = analysisFixture();
+    result.name = '나래 전학 후 설문';
+    const m = analyzeSurvey(result, cls);
+    expect(buildParentCard(result, 's1', cls, m.s1, NONE).surveyName).toBe('○○ 전학 후 설문');
+  });
+  it('masks a student deleted after the survey (name from the label snapshot)', () => {
+    const { cls, result } = analysisFixture();
+    result.labels = { s1: '1. 가온', sx: '7. 사랑' };
+    result.name = '사랑 관련 설문';
+    result.responses.s1.hardReason = '사랑이가 놀려요';
+    const m = analyzeSurvey(result, cls);
+    const c = buildParentCard(result, 's1', cls, m.s1, ALL);
+    expect(c.texts[0].text).toBe('○○이가 놀려요');
+    expect(c.surveyName).toBe('○○ 관련 설문');
+    expect(JSON.stringify(c)).not.toContain('사랑');
   });
   it('hardCount is the number of roster students who nominated this student', () => {
     const { cls, result } = analysisFixture();
@@ -97,13 +123,13 @@ describe('buildParentCard', () => {
 
 describe('maskNames bypass regressions', () => {
   it('compound surname: given name is masked', () => {
-    const r = [stu('a', 1, '남궁민수')];
+    const r = ['남궁민수'];
     expect(maskNames('민수야 미안', r)).toBe('○○야 미안');
     expect(maskNames('남궁민수가 때렸어요', r)).toBe('○○가 때렸어요');
     expect(containsStudentName('민수야 미안', r)).toBe(true);
   });
   it('2-char names: second char masked before 이/아/야 only', () => {
-    const r = [stu('a', 1, '이준'), stu('b', 2, '김솔')];
+    const r = ['이준', '김솔'];
     expect(maskNames('준이가 때렸어요', r)).toBe('○○이가 때렸어요');
     expect(maskNames('솔아 미안', r)).toBe('○○아 미안');
     expect(maskNames('준비물을 챙겼어요', r)).toBe('준비물을 챙겼어요');
@@ -111,19 +137,34 @@ describe('maskNames bypass regressions', () => {
     expect(containsStudentName('준비물', r)).toBe(false);
   });
   it('whitespace in roster name or text', () => {
-    const r = [stu('a', 1, '김 가온')];
+    const r = ['김 가온'];
     expect(maskNames('김가온이랑 놀아요. 가온이가 해요', r)).toBe('○○이랑 놀아요. ○○이가 해요');
     expect(maskNames('김 가온이랑', r)).toBe('○○이랑');
     expect(containsStudentName('김 가온이랑', r)).toBe(true);
     expect(containsStudentName('김가온이랑', r)).toBe(true);
   });
   it('case-insensitive romanized names', () => {
-    const r = [stu('a', 1, 'Daniel')];
+    const r = ['Daniel'];
     expect(maskNames('daniel이랑 DANIEL', r)).toBe('○○이랑 ○○');
     expect(containsStudentName('daniel', r)).toBe(true);
   });
+  it('multi-part romanized name: each part is masked', () => {
+    const r = ['Daniel Kim'];
+    expect(maskNames('Daniel이랑 놀았어요', r)).toBe('○○이랑 놀았어요');
+    expect(maskNames('daniel kim, Kim', r)).toBe('○○, ○○');
+    expect(containsStudentName('daniel', r)).toBe(true);
+  });
+  it('multi-part name with short parts: contiguous runs are masked', () => {
+    const r = ['응우옌 반 안'];
+    expect(maskNames('반 안이랑 놀았어요', r)).toBe('○○이랑 놀았어요');
+    expect(maskNames('반안이가 도와줬어요', r)).toBe('○○이가 도와줬어요');
+    expect(maskNames('응우옌이 왔어요', r)).toBe('○○이 왔어요');
+    expect(maskNames('응우옌 반 안', r)).toBe('○○');
+    expect(containsStudentName('반 안', r)).toBe(true);
+    expect(containsStudentName('반반', r)).toBe(false);
+  });
   it('NFC normalizes decomposed text', () => {
-    const r = [stu('a', 1, '김가온')];
+    const r = ['김가온'];
     expect(maskNames('김가온이랑'.normalize('NFD'), r)).toBe('○○이랑');
     expect(containsStudentName('김가온'.normalize('NFD'), r)).toBe(true);
   });
@@ -142,7 +183,7 @@ describe('maskNames bypass regressions', () => {
     for (const me of cls.students) {
       const json = JSON.stringify(buildParentCard(result, me.id, cls, m[me.id], ALL));
       const others = cls.students.filter((s) => s.id !== me.id);
-      expect(containsStudentName(json, others), `${me.id} leaks: ${json}`).toBe(false);
+      expect(containsStudentName(json, others.map((s) => s.name)), `${me.id} leaks: ${json}`).toBe(false);
       for (const o of others) expect(json).not.toContain(o.id);
     }
   });

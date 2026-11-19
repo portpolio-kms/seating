@@ -6,7 +6,7 @@ import { displayName } from '@/lib/roster';
 import { buildUnits } from '@/lib/seating/layout';
 import type { ConstraintKind } from '@/lib/seating/types';
 import { analyzeSurvey, buildRadar } from '@/lib/survey/analyze';
-import { buildParentCard, containsStudentName, type ParentCard } from '@/lib/survey/parentView';
+import { buildParentCard, containsStudentName, namesToMask, type ParentCard } from '@/lib/survey/parentView';
 import { EMPTY_INCLUDE, Q, studentLabel } from '@/lib/survey/questions';
 import type { ParentInclude, Score, SurveyResult } from '@/lib/survey/types';
 
@@ -161,6 +161,7 @@ export function CounselingCard({ cls, survey, studentId, onSurveyChange, onSelec
   const radar = buildRadar(survey, cls, metrics).items.find((r) => r.studentId === studentId);
   const resp = survey.responses[studentId];
   const include: ParentInclude = survey.parentInclude[studentId] ?? EMPTY_INCLUDE;
+  const maskList = namesToMask(cls, survey);
 
   const toggle = (key: keyof ParentInclude) =>
     onSurveyChange({
@@ -182,7 +183,7 @@ export function CounselingCard({ cls, survey, studentId, onSurveyChange, onSelec
         <input type="checkbox" checked={include[key]} onChange={() => toggle(key)} />
         {label}
       </label>
-      {include[key] && text && containsStudentName(text, cls.students) && (
+      {include[key] && text && containsStudentName(text, maskList) && (
         <p className="ml-6 text-xs text-amber-800">{NAME_WARNING}</p>
       )}
     </div>
@@ -385,7 +386,7 @@ export function CounselingCard({ cls, survey, studentId, onSurveyChange, onSelec
           {parentMode ? '교사 보기' : '학부모 보기'}
         </button>
         <button type="button" className={button} onClick={() => window.print()}>
-          인쇄
+          {parentMode ? '학부모용 인쇄' : '교사용 인쇄'}
         </button>
       </div>
 
