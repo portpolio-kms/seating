@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ToTeacher } from '@/lib/channel';
 import {
   addSeatingRecord,
@@ -17,6 +17,17 @@ const close = vi.fn();
 vi.mock('@/lib/channel', async (orig) => ({
   ...(await orig<typeof import('@/lib/channel')>()),
   openTeacherChannel: (_cb: (m: ToTeacher) => void) => ({ send: vi.fn(), close }),
+}));
+
+let dbBlockedListener: (() => void) | null = null;
+vi.mock('@/lib/db/db', async (orig) => ({
+  ...(await orig<typeof import('@/lib/db/db')>()),
+  onDbBlocked: (cb: () => void) => {
+    dbBlockedListener = cb;
+    return () => {
+      dbBlockedListener = null;
+    };
+  },
 }));
 
 import TeacherPage from '@/app/teacher/page';
@@ -37,7 +48,7 @@ describe('/teacher', () => {
 
     expect(await screen.findByRole('tab', { name: '명단', selected: true })).toBeInTheDocument();
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-      '뽑기', '명단', '배치', '쌍 조건', '기록', '백업/설정',
+      '뽑기', '명단', '배치', '쌍 조건', '교우관계', '기록', '백업/설정',
     ]);
     const classes = await listClasses();
     expect(classes.map((c) => c.name)).toEqual(['6학년 1반']);
@@ -93,6 +104,23 @@ describe('/teacher header', () => {
   it('links back to the classroom home', async () => {
     await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
     expect(screen.getByRole('link', { name: '교실 화면으로' })).toHaveAttribute('href', '/');
+  });
+});
+
+describe('/teacher relations tab', () => {
+  it('opens the 교우관계 tab with the survey sub-views', async () => {
+    await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
+    fireEvent.click(screen.getByRole('tab', { name: '교우관계' }));
+    expect(await screen.findByRole('button', { name: '설문 만들기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '결과 올리기' })).toBeInTheDocument();
+  });
+
+  it('shows a banner when the database upgrade is blocked by another tab', async () => {
+    await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
+    const msg = '이 앱이 열린 다른 창이나 탭을 모두 닫아 주세요. 새 버전으로 바뀌는 중이에요.';
+    expect(screen.queryByText(msg)).toBeNull();
+    act(() => dbBlockedListener?.());
+    expect(screen.getByText(msg)).toBeInTheDocument();
   });
 });
 

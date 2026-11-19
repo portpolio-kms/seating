@@ -8,10 +8,12 @@ import { BackupPanel } from '@/components/teacher/BackupPanel';
 import { ConstraintEditor } from '@/components/teacher/ConstraintEditor';
 import { DrawPanel, type TeacherChannel } from '@/components/teacher/DrawPanel';
 import { HistoryPanel } from '@/components/teacher/HistoryPanel';
+import { RelationsPanel } from '@/components/relations/RelationsPanel';
 import { LayoutEditor } from '@/components/teacher/LayoutEditor';
 import { RosterEditor } from '@/components/teacher/RosterEditor';
 import { useIdleLock } from '@/hooks/useIdleLock';
 import { openTeacherChannel, type ToPresenter, type ToTeacher } from '@/lib/channel';
+import { onDbBlocked } from '@/lib/db/db';
 import { deleteClass, getSettings, listClasses, saveClass, saveSettings, type ClassRecord } from '@/lib/db/repo';
 
 const TABS = [
@@ -19,6 +21,7 @@ const TABS = [
   { id: 'roster', label: '명단' },
   { id: 'layout', label: '배치' },
   { id: 'constraints', label: '쌍 조건' },
+  { id: 'relations', label: '교우관계' },
   { id: 'history', label: '기록' },
   { id: 'settings', label: '백업/설정' },
 ] as const;
@@ -112,6 +115,9 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
   const [creating, setCreating] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [dbBlocked, setDbBlocked] = useState(false);
+
+  useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
 
   // Two-screen mode: the teacher window must stay usable during a reveal, so it does not lock then.
   useIdleLock({ minutes: data?.idleMinutes ?? 5, enabled: unlocked && !revealing, onLock: () => setUnlocked(false) });
@@ -227,6 +233,12 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
             </button>
           </header>
 
+          {dbBlocked && (
+            <p role="alert" className="mx-6 mt-3 rounded bg-amber-50 px-3 py-2 text-amber-900">
+              이 앱이 열린 다른 창이나 탭을 모두 닫아 주세요. 새 버전으로 바뀌는 중이에요.
+            </p>
+          )}
+
           {saveError && (
             <p role="alert" className="mx-6 mt-3 rounded bg-red-50 px-3 py-2 text-red-800">
               저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.
@@ -279,6 +291,7 @@ function TeacherApp({ warnOnScreen }: { warnOnScreen: boolean }) {
               {tab === 'roster' && <RosterEditor cls={active} onChange={persist} />}
               {tab === 'layout' && <LayoutEditor key={active.id} cls={active} onChange={persist} />}
               {tab === 'constraints' && <ConstraintEditor cls={active} onChange={persist} />}
+              {tab === 'relations' && <RelationsPanel key={active.id} cls={active} onChange={persist} />}
               {tab === 'history' && <HistoryPanel cls={active} />}
               {tab === 'settings' && (
                 <BackupPanel
