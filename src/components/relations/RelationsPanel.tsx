@@ -4,19 +4,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import type { SurveyResult } from '@/lib/survey/types';
+import { CounselingCard } from './CounselingCard';
 import { GraphView } from './GraphView';
 import { RadarView } from './RadarView';
 import { SurveySetup } from './SurveySetup';
 import { SurveyUpload } from './SurveyUpload';
 
-// Tasks 8-10 add their views here (id + label) and a render branch below.
 const VIEWS = [
   { id: 'setup', label: '설문 만들기' },
   { id: 'upload', label: '결과 올리기' },
   { id: 'radar', label: '관심 학생' },
   { id: 'graph', label: '관계망' },
+  { id: 'card', label: '상담 카드' },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
+/** Views that need a selected survey. */
+const SURVEY_VIEWS: readonly View[] = ['radar', 'graph', 'card'];
 
 const dateLabel = (iso: string) => {
   const d = new Date(iso);
@@ -66,9 +69,11 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
     }
   }, []);
 
-  /** Moves to a student's card; the view switch is added together with the card view. */
+  /** Moves to a student's counseling card. */
   const openCard = useCallback((studentId: string) => {
     setSelectedStudentId(studentId);
+    viewChosen.current = true;
+    setView('card');
   }, []);
 
   const remove = async (s: SurveyResult) => {
@@ -85,15 +90,17 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
   };
 
   // Survey-dependent views fall back to the upload view when the survey is gone.
-  const shown: View = !survey && (view === 'radar' || view === 'graph') ? 'upload' : view;
+  const shown: View = !survey && SURVEY_VIEWS.includes(view) ? 'upload' : view;
 
-  // Consumed by the card view added in a later task.
-  void selectedStudentId;
+  // The card shows the selected student, or the first by number when none (or a removed one) is selected.
+  const cardStudentId = cls.students.some((s) => s.id === selectedStudentId)
+    ? selectedStudentId
+    : ([...cls.students].sort((a, b) => a.number - b.number)[0]?.id ?? null);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {VIEWS.filter((v) => (v.id !== 'radar' && v.id !== 'graph') || survey).map((v) => (
+        {VIEWS.filter((v) => !SURVEY_VIEWS.includes(v.id) || survey).map((v) => (
           <button
             key={v.id}
             type="button"
@@ -138,6 +145,19 @@ export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: 
         />
       )}
       {shown === 'graph' && survey && <GraphView cls={cls} survey={survey} openCard={openCard} />}
+      {shown === 'card' &&
+        survey &&
+        (cardStudentId ? (
+          <CounselingCard
+            cls={cls}
+            survey={survey}
+            studentId={cardStudentId}
+            onSurveyChange={(s) => void updateSurvey(s)}
+            onSelectStudent={setSelectedStudentId}
+          />
+        ) : (
+          <p className="text-sm text-slate-600">먼저 학생 명단을 입력해 주세요</p>
+        ))}
       {shown === 'upload' && (
         <div className="space-y-6">
           <SurveyUpload cls={cls} onSaved={addSurvey} />

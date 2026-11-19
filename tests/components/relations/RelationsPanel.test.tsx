@@ -114,6 +114,33 @@ describe('RelationsPanel', () => {
     expect(screen.queryByRole('button', { name: '관심 학생' })).toBeNull();
   });
 
+  it('opens the counseling card from the radar and saves parent-include flags', async () => {
+    const { analysisFixture } = await import('../../lib/survey/fixture');
+    const { cls, result } = analysisFixture();
+    const first = render(<RelationsPanel cls={cls} onChange={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: '상담 카드' })).toBeNull();
+    first.unmount();
+    await saveSurvey(result);
+    render(<RelationsPanel cls={cls} onChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '상담 카드' }));
+    expect(screen.getByLabelText('학생 선택')).toHaveValue('s1');
+
+    fireEvent.click(screen.getByRole('button', { name: '관심 학생' }));
+    fireEvent.click(within(screen.getByRole('list', { name: '관심 학생 목록' })).getByRole('button', { name: '라희' }));
+    expect(screen.getByRole('button', { name: '상담 카드' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('학생 선택')).toHaveValue('s4');
+
+    fireEvent.click(screen.getByLabelText('지목받은 수 포함'));
+    await waitFor(async () =>
+      expect((await listSurveys(cls.id))[0].parentInclude.s4).toEqual({
+        ownHardReason: false,
+        toTeacher: false,
+        hardCount: true,
+      }),
+    );
+    expect(screen.getByLabelText('지목받은 수 포함')).toBeChecked();
+  });
+
   it('shows the graph button only with a survey and renders the graph view', async () => {
     const { analysisFixture } = await import('../../lib/survey/fixture');
     const { cls, result } = analysisFixture();

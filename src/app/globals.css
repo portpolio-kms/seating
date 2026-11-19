@@ -4,7 +4,7 @@ body {
   font-family: var(--font-noto-sans-kr), sans-serif;
 }
 
-/* Printing a past seating chart: only the .print-area block is printed. */
+/* Printing (past seating chart, counseling card): only the .print-area block is printed. */
 @media print {
   body * {
     visibility: hidden;
