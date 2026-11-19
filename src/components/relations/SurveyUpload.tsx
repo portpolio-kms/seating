@@ -6,6 +6,8 @@ import { saveSurvey } from '@/lib/db/surveys';
 import { importSurveyCsv, type ImportPreview } from '@/lib/survey/importCsv';
 import type { SurveyResult } from '@/lib/survey/types';
 
+const NOT_UTF8 = '구글 시트에서 바로 내려받은 CSV 파일을 올려 주세요 (엑셀로 저장한 파일은 읽을 수 없어요)';
+
 function defaultName(): string {
   const d = new Date();
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 설문`;
@@ -34,8 +36,10 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
     setPreview(null);
     if (!file) return;
     let result: ImportPreview;
+    let text: string;
     try {
-      result = importSurveyCsv(await file.text(), cls);
+      text = await file.text();
+      result = importSurveyCsv(text, cls);
     } catch {
       if (request !== requestRef.current) return;
       setError('파일을 읽을 수 없어요');
@@ -43,6 +47,12 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
       return;
     }
     if (request !== requestRef.current) return; // a newer file was picked meanwhile
+    if (!result.ok && text.includes('�')) {
+      // Not UTF-8 (e.g. re-saved in Excel): the headers are garbled, not missing.
+      setError(NOT_UTF8);
+      resetInput();
+      return;
+    }
     setPreview(result);
   };
 

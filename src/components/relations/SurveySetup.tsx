@@ -10,7 +10,7 @@ const STEPS = [
   '기존 코드를 지우고, 위 코드를 붙여 넣습니다.',
   '▶ 실행 버튼을 누르고, 권한 허용 창이 뜨면 허용합니다.',
   '화면에 나오는 설문 링크를 학생들에게 공유합니다.',
-  '응답이 모이면 응답 시트(설문 응답)를 CSV로 다운로드합니다.',
+  "응답이 모이면 아래쪽 '설문지 응답 시트1' 탭을 연 상태에서 파일 → 다운로드 → 쉼표로 구분된 값(.csv)을 고릅니다.",
   '"교우관계" 탭에서 CSV 파일을 올립니다.',
 ];
 
@@ -21,9 +21,12 @@ function today(): string {
 }
 
 export function SurveySetup({ cls }: { cls: ClassRecord }) {
-  const [title, setTitle] = useState(() => `${cls.name} 교우관계 설문 ${today()}`);
+  const [defaultTitle] = useState(() => `${cls.name} 교우관계 설문 ${today()}`);
+  const [title, setTitle] = useState(defaultTitle);
   const [msg, setMsg] = useState<string | null>(null);
-  const code = useMemo(() => buildAppsScript(cls, title), [cls, title]);
+  // A blank title would create an untitled form: fall back to the default title.
+  const formTitle = title.trim() || defaultTitle;
+  const code = useMemo(() => buildAppsScript(cls, formTitle), [cls, formTitle]);
 
   if (cls.students.length === 0) {
     return <p className="text-slate-600">명단을 먼저 입력해 주세요</p>;

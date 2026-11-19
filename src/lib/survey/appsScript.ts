@@ -31,7 +31,7 @@ export function buildAppsScript(cls: ClassRecord, title: string): string {
   }
 
   form.addListItem().setTitle(${j(Q.name)}).setHelpText(${j('자기 이름을 골라 주세요.')}).setChoiceValues(labels).setRequired(true);
-  form.addGridItem().setTitle(${j(Q.ratings)}).setHelpText(${j('1 = 힘들어요, 5 = 아주 좋아요. 자기 이름은 건너뛰세요.')}).setRows(labels).setColumns(['1', '2', '3', '4', '5']).setRequired(false);
+  form.addGridItem().setTitle(${j(Q.ratings)}).setHelpText(${j('이 친구와 함께 활동하면 어때요? 1 = 힘들어요, 5 = 아주 좋아요. 자기 이름은 건너뛰세요.')}).setRows(labels).setColumns(['1', '2', '3', '4', '5']).setRequired(false);
   checkbox(${j(Q.best)}, ${j('가장 친한 친구를 골라 주세요 (최대 3명)')}, false, 3);
   checkbox(${j(Q.wantCloser)}, ${j('더 친해지고 싶은 친구를 골라 주세요 (최대 3명)')}, false, 3);
   checkbox(${j(Q.playWith)}, ${j('쉬는 시간에 주로 같이 노는 친구를 모두 골라 주세요')}, false, 0);

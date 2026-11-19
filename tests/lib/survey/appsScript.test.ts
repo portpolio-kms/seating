@@ -42,6 +42,12 @@ describe('buildAppsScript', () => {
     expect(code).toContain('getPublishedUrl()');
   });
 
+  it('Q2 help text starts with the spec question', () => {
+    const code = buildAppsScript(fakeClass(4), '제목');
+    const line = code.split('\n').find((l) => l.includes(JSON.stringify(Q.ratings)))!;
+    expect(line).toMatch(/setHelpText\("이 친구와 함께 활동하면 어때요\?/);
+  });
+
   it('sorts students by number', () => {
     const cls = fakeClass(3);
     cls.students = [...cls.students].reverse();

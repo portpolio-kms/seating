@@ -59,6 +59,20 @@ describe('SurveyUpload', () => {
     expect(await listSurveys('c1')).toEqual([]);
   });
 
+  it('asks for the original Google Sheets CSV when the file is not UTF-8', async () => {
+    render(<SurveyUpload cls={fakeClass(4)} onSaved={vi.fn()} />);
+    // CP949 bytes ("타임스탬프,내 이름") decode to U+FFFD replacement characters as UTF-8.
+    const bytes = new Uint8Array([0xc5, 0xb8, 0xc0, 0xd3, 0xbd, 0xba, 0xc5, 0xc6, 0xc7, 0xc1, 0x2c, 0x61, 0x0d, 0x0a, 0x31, 0x2c, 0x32]);
+    fireEvent.change(screen.getByLabelText(/CSV 파일/), {
+      target: { files: [new File([bytes], 'excel.csv', { type: 'text/csv' })] },
+    });
+    expect(
+      await screen.findByText('구글 시트에서 바로 내려받은 CSV 파일을 올려 주세요 (엑셀로 저장한 파일은 읽을 수 없어요)'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('이 앱에서 만든 설문의 CSV가 아니에요')).toBeNull();
+    expect(screen.queryByRole('button', { name: '저장' })).toBeNull();
+  });
+
   it('shows a generic message when the file cannot be read', async () => {
     render(<SurveyUpload cls={fakeClass(4)} onSaved={vi.fn()} />);
     const file = new File(['x'], 'r.csv');
