@@ -143,6 +143,12 @@ describe('/teacher forgot PIN', () => {
 });
 
 describe('/teacher class management', () => {
+  it('tells that the backup also contains survey responses', async () => {
+    await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
+    fireEvent.click(screen.getByRole('tab', { name: '백업/설정' }));
+    expect(await screen.findByText(/설문 응답도 들어 있어요\./)).toBeInTheDocument();
+  });
+
   it('renames the current class', async () => {
     await unlockWith([mkClass('c1', '6학년 1반', '2026-01-01')]);
     fireEvent.click(screen.getByRole('tab', { name: '백업/설정' }));

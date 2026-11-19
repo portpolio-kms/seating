@@ -203,7 +203,7 @@ export function BackupPanel({
 
       <section className={card}>
         <h2 className="text-lg font-bold">백업 내보내기</h2>
-        <p className="text-amber-800">학생 정보가 들어 있으니 안전하게 보관하세요.</p>
+        <p className="text-amber-800">학생 정보가 들어 있으니 안전하게 보관하세요. 설문 응답도 들어 있어요.</p>
         <div className="flex flex-wrap gap-3">
           {cls && (
             <button type="button" className={button} onClick={() => void exportData([cls.id])}>
