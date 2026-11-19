@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import type { SurveyResult } from '@/lib/survey/types';
+import { RadarView } from './RadarView';
 import { SurveySetup } from './SurveySetup';
 import { SurveyUpload } from './SurveyUpload';
 
@@ -11,6 +12,7 @@ import { SurveyUpload } from './SurveyUpload';
 const VIEWS = [
   { id: 'setup', label: '설문 만들기' },
   { id: 'upload', label: '결과 올리기' },
+  { id: 'radar', label: '관심 학생' },
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
 
@@ -20,7 +22,7 @@ const dateLabel = (iso: string) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassRecord) => void }) {
+export function RelationsPanel({ cls, onChange }: { cls: ClassRecord; onChange: (c: ClassRecord) => void }) {
   const [view, setView] = useState<View>('setup');
   const [surveys, setSurveys] = useState<SurveyResult[]>([]);
   const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
@@ -80,22 +82,22 @@ export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassR
     if (selectedSurveyId === s.id) setSelectedSurveyId(rest[0]?.id ?? null);
   };
 
-  // Consumed by the analysis views added in later tasks.
-  void survey;
+  // Survey-dependent views fall back to the upload view when the survey is gone.
+  const shown: View = !survey && view === 'radar' ? 'upload' : view;
+
+  // Consumed by the card view added in a later task.
   void selectedStudentId;
-  void openCard;
-  void updateSurvey;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {VIEWS.map((v) => (
+        {VIEWS.filter((v) => v.id !== 'radar' || survey).map((v) => (
           <button
             key={v.id}
             type="button"
-            aria-pressed={view === v.id}
+            aria-pressed={shown === v.id}
             className={`rounded-lg border px-3 py-1 text-sm font-semibold ${
-              view === v.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white'
+              shown === v.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white'
             }`}
             onClick={() => {
               viewChosen.current = true;
@@ -123,8 +125,17 @@ export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassR
 
       {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-red-800">{error}</p>}
 
-      {view === 'setup' && <SurveySetup cls={cls} />}
-      {view === 'upload' && (
+      {shown === 'setup' && <SurveySetup cls={cls} />}
+      {shown === 'radar' && survey && (
+        <RadarView
+          cls={cls}
+          survey={survey}
+          onChange={onChange}
+          onSurveyChange={(s) => void updateSurvey(s)}
+          openCard={openCard}
+        />
+      )}
+      {shown === 'upload' && (
         <div className="space-y-6">
           <SurveyUpload cls={cls} onSaved={addSurvey} />
           <section className="space-y-2">

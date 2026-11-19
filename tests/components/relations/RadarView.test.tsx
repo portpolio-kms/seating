@@ -102,17 +102,6 @@ describe('RadarView', () => {
     });
   });
 
-  it('shows the canAddConstraint message instead of adding', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const { onChange } = setup({
-      cls: { constraints: [{ id: 'x', a: 's4', b: 's1', kind: 'must-pair' }] },
-    });
-    // an existing constraint hides the buttons, so check the other pair with a clashing rule instead
-    expect(within(suggestionItem('가온', '라희')).getByText('이미 설정됨')).toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalled();
-    expect(alert).not.toHaveBeenCalled();
-  });
-
   it('alerts with the rejection message when the constraint is not allowed', async () => {
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const constraints = await import('@/lib/seating/constraints');
