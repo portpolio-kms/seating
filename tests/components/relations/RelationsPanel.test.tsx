@@ -55,4 +55,21 @@ describe('RelationsPanel', () => {
     expect(screen.queryByLabelText('설문 선택')).toBeNull();
     confirm.mockRestore();
   });
+
+  it('keeps the view the user picked when the survey load resolves later', async () => {
+    await saveSurvey(survey('a', '10월 설문', '2026-10-01T00:00:00.000Z'));
+    render(<RelationsPanel cls={fakeClass(4)} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '설문 만들기' }));
+    await screen.findByLabelText('설문 선택');
+    expect(screen.getByRole('button', { name: '설문 만들기' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows the local calendar date of the import', async () => {
+    const iso = '2026-10-01T00:00:00.000Z';
+    await saveSurvey(survey('a', '10월 설문', iso));
+    render(<RelationsPanel cls={fakeClass(4)} onChange={vi.fn()} />);
+    const d = new Date(iso);
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    expect(await screen.findByRole('option', { name: `10월 설문 (${local})` })).toBeInTheDocument();
+  });
 });

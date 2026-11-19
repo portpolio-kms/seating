@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
 import { saveSurvey } from '@/lib/db/surveys';
 import { importSurveyCsv, type ImportPreview } from '@/lib/survey/importCsv';
@@ -16,26 +16,40 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
   const [name, setName] = useState(defaultName);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const requestRef = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const resetInput = () => {
+    if (inputRef.current) inputRef.current.value = '';
+  };
 
   const labelOf = (id: string) => preview?.result?.labels[id] ?? id;
 
   const onFile = async (file: File | undefined) => {
+    const request = ++requestRef.current;
     setSaved(false);
     setError(null);
     setPreview(null);
     if (!file) return;
-    let text: string;
+    let result: ImportPreview;
     try {
-      text = await file.text();
+      result = importSurveyCsv(await file.text(), cls);
     } catch {
+      if (request !== requestRef.current) return;
       setError('파일을 읽을 수 없어요');
+      resetInput();
       return;
     }
-    setPreview(importSurveyCsv(text, cls));
+    if (request !== requestRef.current) return; // a newer file was picked meanwhile
+    setPreview(result);
   };
 
   const save = async () => {
-    if (!preview?.ok || !preview.result) return;
+    if (!preview?.ok || !preview.result || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     const survey: SurveyResult = {
       ...preview.result,
       id: crypto.randomUUID(),
@@ -46,10 +60,15 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
       await saveSurvey(survey);
     } catch {
       setError('저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.');
+      savingRef.current = false;
+      setSaving(false);
       return;
     }
+    savingRef.current = false;
+    setSaving(false);
     setPreview(null);
     setSaved(true);
+    resetInput();
     onSaved(survey);
   };
 
@@ -58,7 +77,7 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
       <h3 className="font-bold">결과 올리기</h3>
       <label className="flex flex-col gap-1 text-sm">
         설문 결과 CSV 파일
-        <input type="file" accept=".csv,text/csv" onChange={(e) => void onFile(e.target.files?.[0])} />
+        <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={(e) => void onFile(e.target.files?.[0])} />
       </label>
 
       {error && <p role="alert" className="rounded bg-red-50 px-3 py-2 text-red-800">{error}</p>}
@@ -97,7 +116,7 @@ export function SurveyUpload({ cls, onSaved }: { cls: ClassRecord; onSaved: (s: 
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          <button type="button" className="rounded bg-blue-600 px-4 py-2 font-semibold text-white" onClick={() => void save()}>
+          <button type="button" className="rounded bg-blue-600 px-4 py-2 font-semibold text-white" disabled={saving} onClick={() => void save()}>
             저장
           </button>
         </div>

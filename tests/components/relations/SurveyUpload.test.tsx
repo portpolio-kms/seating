@@ -66,4 +66,38 @@ describe('SurveyUpload', () => {
     fireEvent.change(screen.getByLabelText(/CSV 파일/), { target: { files: [file] } });
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('파일을 읽을 수 없어요'));
   });
+
+  it('saves only once when 저장 is clicked twice quickly', async () => {
+    const cls = fakeClass(4);
+    render(<SurveyUpload cls={cls} onSaved={vi.fn()} />);
+    upload(buildCsv([{ name: '1. 가온' }], cls));
+    const btn = await screen.findByRole('button', { name: '저장' });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    await screen.findByText(/업로드했으면 지워 주세요/);
+    expect(await listSurveys(cls.id)).toHaveLength(1);
+  });
+
+  it('ignores a slow first file when a second file was picked meanwhile', async () => {
+    const cls = fakeClass(4);
+    render(<SurveyUpload cls={cls} onSaved={vi.fn()} />);
+    const slow = new File([''], 'a.csv');
+    let release: (t: string) => void = () => {};
+    Object.defineProperty(slow, 'text', { value: () => new Promise<string>((r) => (release = r)) });
+    const input = screen.getByLabelText(/CSV 파일/);
+    fireEvent.change(input, { target: { files: [slow] } });
+    upload(buildCsv([{ name: '1. 가온' }, { name: '2. 나래' }], cls));
+    expect(await screen.findByText('응답 2명')).toBeInTheDocument();
+    release(buildCsv([{ name: '1. 가온' }], cls));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('응답 2명')).toBeInTheDocument();
+  });
+
+  it('shows the generic message when the CSV text makes the import throw', async () => {
+    render(<SurveyUpload cls={fakeClass(4)} onSaved={vi.fn()} />);
+    const file = new File(['x'], 'r.csv');
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(null as unknown as string) });
+    fireEvent.change(screen.getByLabelText(/CSV 파일/), { target: { files: [file] } });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('파일을 읽을 수 없어요'));
+  });
 });

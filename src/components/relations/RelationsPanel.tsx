@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClassRecord } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import type { SurveyResult } from '@/lib/survey/types';
@@ -14,7 +14,11 @@ const VIEWS = [
 ] as const;
 type View = (typeof VIEWS)[number]['id'];
 
-const dateLabel = (iso: string) => iso.slice(0, 10);
+const dateLabel = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassRecord) => void }) {
   const [view, setView] = useState<View>('setup');
@@ -22,6 +26,7 @@ export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassR
   const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const viewChosen = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -30,7 +35,7 @@ export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassR
         if (!alive) return;
         setSurveys(list);
         setSelectedSurveyId(list[0]?.id ?? null);
-        if (list.length > 0) setView('upload');
+        if (list.length > 0 && !viewChosen.current) setView('upload');
       },
       () => alive && setError('설문 결과를 불러오지 못했어요.'),
     );
@@ -92,7 +97,10 @@ export function RelationsPanel({ cls }: { cls: ClassRecord; onChange: (c: ClassR
             className={`rounded-lg border px-3 py-1 text-sm font-semibold ${
               view === v.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white'
             }`}
-            onClick={() => setView(v.id)}
+            onClick={() => {
+              viewChosen.current = true;
+              setView(v.id);
+            }}
           >
             {v.label}
           </button>
