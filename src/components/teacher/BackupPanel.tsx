@@ -44,7 +44,7 @@ function ClassManager({
   const remove = () => {
     if (
       !window.confirm(
-        `'${cls.name}' 학급을 지울까요? 이 학급의 명단과 좌석표 기록도 함께 지워지고 되돌릴 수 없어요.`,
+        `'${cls.name}' 학급을 지울까요? 이 학급의 명단, 좌석표 기록, 설문 결과도 함께 지워지고 되돌릴 수 없어요.`,
       )
     )
       return;

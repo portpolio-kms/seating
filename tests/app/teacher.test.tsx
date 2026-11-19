@@ -167,7 +167,7 @@ describe('/teacher class management', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
     fireEvent.click(await screen.findByRole('button', { name: '이 학급 지우기' }));
     expect(confirm.mock.calls[0][0]).toContain("'6학년 1반'");
-    expect(confirm.mock.calls[0][0]).toContain('좌석표 기록도 함께 지워지고 되돌릴 수 없어요');
+    expect(confirm.mock.calls[0][0]).toContain('이 학급의 명단, 좌석표 기록, 설문 결과도 함께 지워지고 되돌릴 수 없어요');
     expect(await listClasses()).toHaveLength(2);
 
     confirm.mockReturnValueOnce(true);
