@@ -17,6 +17,16 @@ export type SeatingDatabase = IDBPDatabase<SeatingDB>;
 
 let dbPromise: Promise<SeatingDatabase> | null = null;
 
+const blockedListeners = new Set<() => void>();
+
+/** Calls cb when a database upgrade is blocked by another open window or tab of an older version. */
+export function onDbBlocked(cb: () => void): () => void {
+  blockedListeners.add(cb);
+  return () => {
+    blockedListeners.delete(cb);
+  };
+}
+
 export function getDb(): Promise<SeatingDatabase> {
   if (!dbPromise) {
     dbPromise = openDB<SeatingDB>(DB_NAME, DB_VERSION, {
@@ -32,6 +42,15 @@ export function getDb(): Promise<SeatingDatabase> {
           const surveys = db.createObjectStore('surveys', { keyPath: 'id' });
           surveys.createIndex('classId', 'classId');
         }
+      },
+      blocked() {
+        blockedListeners.forEach((cb) => cb());
+      },
+      blocking() {
+        // A newer version wants to upgrade: step aside so it never waits on us.
+        const p = dbPromise;
+        dbPromise = null;
+        void p?.then((db) => db.close());
       },
       terminated() {
         dbPromise = null;

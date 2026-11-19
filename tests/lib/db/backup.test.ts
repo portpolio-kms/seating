@@ -135,6 +135,20 @@ describe('backup', () => {
     });
   });
 
+  it('version 1 files ignore a stray surveys key', () => {
+    const v1 = {
+      format: 'seating-app-backup',
+      version: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      classes: [makeClass()],
+      records: [],
+      surveys: [{ garbage: true }],
+    };
+    const r = parseBackup(JSON.stringify(v1));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.surveys).toBeUndefined();
+  });
+
   it('import overwrite skips records whose class is not in the file', async () => {
     const b = await exportBackup();
     b.classes = [makeClass('c1')];

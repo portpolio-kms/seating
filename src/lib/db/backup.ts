@@ -170,6 +170,11 @@ export function parseBackup(json: string): { ok: true; data: BackupFile } | { ok
   if ((o.version as number) >= 2 && (!Array.isArray(o.surveys) || !o.surveys.every(isSurvey))) {
     return { ok: false, error: UNREADABLE };
   }
+  if ((o.version as number) < 2) {
+    // Version 1 never had surveys: drop any stray key so unvalidated data cannot be imported.
+    const { surveys: _ignored, ...rest } = o;
+    return { ok: true, data: rest as unknown as BackupFile };
+  }
   return { ok: true, data: raw as BackupFile };
 }
 

@@ -1,6 +1,6 @@
 import { openDB } from 'idb';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { __resetDbForTests, DB_NAME } from '@/lib/db/db';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { __resetDbForTests, DB_NAME, onDbBlocked } from '@/lib/db/db';
 import { deleteClass, getClass, listClasses, saveClass, wipeAll } from '@/lib/db/repo';
 import { deleteSurvey, listSurveys, saveSurvey } from '@/lib/db/surveys';
 import { exportBackup, importBackup, parseBackup } from '@/lib/db/backup';
@@ -157,6 +157,30 @@ describe('db upgrade from version 1', () => {
     expect((await getClass('legacy'))?.name).toBe('6학년 1반');
     await saveSurvey(survey('a', 'legacy', '2026-11-01T00:00:00.000Z'));
     expect(await listSurveys('legacy')).toHaveLength(1);
+    await __resetDbForTests();
+  });
+});
+
+describe('db upgrade blocked by an old window', () => {
+  it('reports blocked, then completes once the old connection closes', async () => {
+    await __resetDbForTests();
+    await indexedDB.deleteDatabase(DB_NAME);
+    const old = await openDB(DB_NAME, 1, {
+      upgrade(db) {
+        db.createObjectStore('classes', { keyPath: 'id' });
+        db.createObjectStore('records', { keyPath: 'id' }).createIndex('classId', 'classId');
+        db.createObjectStore('settings');
+      },
+    });
+    await old.put('classes', makeClass('legacy'));
+
+    let blocked = 0;
+    const off = onDbBlocked(() => blocked++);
+    const pending = getClass('legacy');
+    await vi.waitFor(() => expect(blocked).toBeGreaterThan(0));
+    old.close();
+    expect((await pending)?.id).toBe('legacy');
+    off();
     await __resetDbForTests();
   });
 });
