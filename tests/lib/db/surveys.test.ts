@@ -138,6 +138,32 @@ describe('surveys in backups', () => {
     expect((await listSurveys('c1')).map((s) => s.id)).toEqual(['new']);
     expect(await listSurveys('nowhere')).toEqual([]);
   });
+
+  it('overwrite from a version 1 backup keeps the class surveys', async () => {
+    await saveClass(makeClass('c1'));
+    await saveClass(makeClass('c2'));
+    await saveSurvey(survey('mine', 'c1', '2026-11-01T00:00:00.000Z'));
+    await saveSurvey(survey('other', 'c2', '2026-11-01T00:00:00.000Z'));
+    const r = parseBackup(JSON.stringify({ ...v2([]), version: 1, surveys: undefined }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await importBackup(r.data, 'overwrite');
+    expect((await listSurveys('c1')).map((s) => s.id)).toEqual(['mine']);
+    expect((await listSurveys('c2')).map((s) => s.id)).toEqual(['other']);
+  });
+
+  it('overwrite from a version 2 backup replaces only that class surveys', async () => {
+    await saveClass(makeClass('c1'));
+    await saveClass(makeClass('c2'));
+    await saveSurvey(survey('mine', 'c1', '2026-11-01T00:00:00.000Z'));
+    await saveSurvey(survey('other', 'c2', '2026-11-01T00:00:00.000Z'));
+    const r = parseBackup(JSON.stringify(v2([survey('fresh', 'c1', '2026-11-05T00:00:00.000Z')])));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    await importBackup(r.data, 'overwrite');
+    expect((await listSurveys('c1')).map((s) => s.id)).toEqual(['fresh']);
+    expect((await listSurveys('c2')).map((s) => s.id)).toEqual(['other']);
+  });
 });
 
 describe('db upgrade from version 1', () => {

@@ -192,8 +192,11 @@ export async function importBackup(data: BackupFile, mode: 'overwrite' | 'add-ne
     for (const c of data.classes) {
       const oldKeys = await records.index('classId').getAllKeys(c.id);
       await Promise.all(oldKeys.map((k) => records.delete(k)));
-      const oldSurveyKeys = await surveys.index('classId').getAllKeys(c.id);
-      await Promise.all(oldSurveyKeys.map((k) => surveys.delete(k)));
+      // A version-1 file has no surveys at all: keep the class's existing surveys then.
+      if (data.surveys !== undefined) {
+        const oldSurveyKeys = await surveys.index('classId').getAllKeys(c.id);
+        await Promise.all(oldSurveyKeys.map((k) => surveys.delete(k)));
+      }
       await classes.put(c);
     }
     // Records whose class is not in the file would be invisible orphans: skip them.
