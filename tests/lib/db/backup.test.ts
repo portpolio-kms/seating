@@ -16,7 +16,7 @@ describe('backup', () => {
     expect(s).not.toContain('pinHash');
     expect(s).not.toContain('secrethash');
     expect(b.format).toBe('seating-app-backup');
-    expect(b.version).toBe(1);
+    expect(b.version).toBe(2);
   });
 
   it('export can be limited to classIds', async () => {
@@ -32,7 +32,7 @@ describe('backup', () => {
   it('parseBackup rejects bad input', () => {
     expect(parseBackup('not json')).toEqual({ ok: false, error: '백업 파일을 읽을 수 없어요' });
     expect(parseBackup('{"format":"other","version":1}')).toEqual({ ok: false, error: '백업 파일을 읽을 수 없어요' });
-    expect(parseBackup('{"format":"seating-app-backup","version":2,"classes":[],"records":[]}')).toEqual({
+    expect(parseBackup('{"format":"seating-app-backup","version":3,"classes":[],"records":[]}')).toEqual({
       ok: false,
       error: '더 새로운 버전의 앱에서 만든 백업이에요',
     });

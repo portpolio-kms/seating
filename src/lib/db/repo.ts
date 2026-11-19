@@ -1,7 +1,7 @@
 import type { Assignment, Layout, PairConstraint, Student } from '@/lib/seating/types';
 import { getDb, SETTINGS_KEY } from './db';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type RevealStyle = 'A' | 'B' | 'C';
 
@@ -49,10 +49,12 @@ export async function saveClass(c: ClassRecord): Promise<void> {
 
 export async function deleteClass(id: string): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(['classes', 'records'], 'readwrite');
+  const tx = db.transaction(['classes', 'records', 'surveys'], 'readwrite');
   await tx.objectStore('classes').delete(id);
   const keys = await tx.objectStore('records').index('classId').getAllKeys(id);
   await Promise.all(keys.map((k) => tx.objectStore('records').delete(k)));
+  const surveyKeys = await tx.objectStore('surveys').index('classId').getAllKeys(id);
+  await Promise.all(surveyKeys.map((k) => tx.objectStore('surveys').delete(k)));
   await tx.done;
 }
 
@@ -99,11 +101,12 @@ export async function saveSettings(s: Partial<AppSettings>): Promise<void> {
 
 export async function wipeAll(): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(['classes', 'records', 'settings'], 'readwrite');
+  const tx = db.transaction(['classes', 'records', 'settings', 'surveys'], 'readwrite');
   await Promise.all([
     tx.objectStore('classes').clear(),
     tx.objectStore('records').clear(),
     tx.objectStore('settings').clear(),
+    tx.objectStore('surveys').clear(),
   ]);
   await tx.done;
 }
